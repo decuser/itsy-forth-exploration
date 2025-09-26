@@ -1,0 +1,676 @@
+     1                                  ; assemble time variable for the head of the linked list of words
+     2                                  %define head 0
+     3                                  
+     4                                  ; immediate mask
+     5                                  immediate equ 080h
+     6                                  
+     7                                  ; Format of the linked list entries
+     8                                  
+     9                                  ; | Field                | Description                          |
+    10                                  ; | -------------------- | ------------------------------------ |
+    11                                  ; | Back-link            | Pointer to previous dictionary entry |
+    12                                  ; | Name                 | Length byte + ASCII name of the word |
+    13                                  ; | Execution token (xt) | Pointer to machine code for the word |
+    14                                  ; | Value                | Runtime storage for the variable     |
+    15                                  
+    16                                  
+    17                                  ; macros during dev
+    18                                  %macro header 4
+    19                                  %%head dw head
+    20                                  %define head %%head
+    21                                  %strlen %%count %1
+    22                                  db %3 + %%count,%1
+    23                                  xt_ %+ %2 dw %4
+    24                                  %endmacro
+    25                                  
+    26                                  %macro primitive 2-3 0
+    27                                  header %1,%2,%3,$+2
+    28                                  %endmacro
+    29                                  
+    30                                  %macro colon 2-3 0
+    31                                  header %1,%2,%3,docolon
+    32                                  %endmacro
+    33                                  
+    34                                  %macro constant 3
+    35                                  header %1,%2,0,doconst
+    36                                  val_ %+ %2 dw %3
+    37                                  %endmacro
+    38                                  
+    39                                  %macro variable 3
+    40                                  header %1,%2,0,dovar
+    41                                  val_ %+ %2 dw %3
+    42                                  %endmacro
+    43                                  
+    44                                  ; this is a dos com, set origin to 100h and just to 
+    45                                          org 0100h
+    46 00000000 EB54                            jmp xt_abort+2
+    47                                  
+    48                                  ; -------------------
+    49                                  ; Forth Variables
+    50                                  ; -------------------
+    51                                   
+    52                                  ; | Name  | Description                                          |
+    53                                  ; | ----- | ---------------------------------------------------- |
+    54                                  ; | state | Current interpreter state                            |
+    55                                  ; | >in   | Input buffer index / current parse position          |
+    56                                  ; | #tib  | Number of characters in the input buffer             |
+    57                                  ; | dp    | Data pointer for dictionary or memory allocation     |
+    58                                  ; | base  | Numeric base for number parsing/output               |
+    59                                  ; | last  | Most recently compiled word or last dictionary entry |
+    60                                  
+    61                                  ; assembly label prefixes
+    62                                  
+    63                                  ; | Name Prefix | Description                                            |
+    64                                  ; | ----------- | ------------------------------------------------------ |
+    65                                  ; | fw_         | a forth word                                           |
+    66                                  ; | xt_         | Execution token (pointer to machine code for the word) |
+    67                                  ; | val_        | Runtime value of the variable                          |
+    68                                  
+    69                                  ; state
+    70                                  fw_state:
+    71 00000002 0000                            dw 0
+    72 00000004 057374617465                    db                  5,'state'
+    73 0000000A [FC02]                          xt_state:           dw dovar
+    74 0000000C 0000                            val_state:          dw 0
+    75                                  
+    76                                  ; >in
+    77                                  fw_to_in:
+    78 0000000E [0200]                          dw fw_state
+    79 00000010 033E696E                        db                  3,'>in'
+    80 00000014 [FC02]                          xt_to_in:           dw  dovar
+    81 00000016 0000                            val_to_in:          dw 0
+    82                                  
+    83                                  ; #tib
+    84                                  fw_number_t_i_b:
+    85 00000018 [0E00]                          dw fw_to_in
+    86 0000001A 0423746962                      db                  4,'#tib'
+    87 0000001F [FC02]                          xt_number_t_i_b:    dw  dovar
+    88 00000021 0000                            val_number_t_i_b:   dw 0
+    89                                  
+    90                                  ; dp
+    91                                  fw_dp:
+    92 00000023 [1800]                          dw fw_number_t_i_b
+    93 00000025 026470                          db                  2,'dp'
+    94 00000028 [FC02]                          xt_dp:              dw  dovar
+    95 0000002A [D203]                          val_dp:             dw freemem
+    96                                  
+    97                                  ; base
+    98                                  fw_base:
+    99 0000002C [2300]                          dw fw_dp
+   100 0000002E 0462617365                      db                  4,'base'
+   101 00000033 [FC02]                          xt_base:            dw  dovar
+   102 00000035 0A00                            val_base:           dw 10
+   103                                  
+   104                                  ; last
+   105                                  fw_last:
+   106 00000037 [2C00]                          dw fw_base
+   107 00000039 046C617374                      db                  4,'last'
+   108 0000003E [FC02]                          xt_last:            dw  dovar
+   109 00000040 [4003]                          val_last:           dw final
+   110                                  
+   111                                  ; tib
+   112                                  fw_t_i_b:
+   113 00000042 [3700]                          dw fw_last
+   114 00000044 03746962                        db                  3,'tib'
+   115 00000048 [3903]                          xt_t_i_b:           dw  doconst
+   116 0000004A 0080                            val_t_i_b:          dw 32768
+   117                                  
+   118                                          ; set defined head to last primitive expanded during dev
+   119                                          %define head fw_t_i_b
+   120                                  
+   121                                  ; -------------------
+   122                                  ; Initialisation
+   123                                  ; -------------------
+   124                                  
+   125                                          primitive 'abort',abort
+    27                              <1> header %1,%2,%3,$+2
+    19 0000004C [4200]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 0000004E 0561626F7274        <2> db %3 + %%count,%1
+    23 00000054 [5600]              <2> xt_ %+ %2 dw %4
+   126 00000056 A1[2100]                        mov ax,word[val_number_t_i_b]
+   127 00000059 A3[1600]                        mov word[val_to_in],ax
+   128 0000005C 31ED                            xor bp,bp
+   129 0000005E 892E[0C00]                      mov word[val_state],bp
+   130 00000062 BC00FF                          mov sp,-256
+   131 00000065 BE[4E03]                        mov si,xt_interpret+2
+   132 00000068 E98400                          jmp next
+   133                                  
+   134                                  ; -------------------
+   135                                  ; Compilation
+   136                                  ; -------------------
+   137                                  
+   138                                          primitive ',',comma
+    27                              <1> header %1,%2,%3,$+2
+    19 0000006B [4C00]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 0000006D 012C                <2> db %3 + %%count,%1
+    23 0000006F [7100]              <2> xt_ %+ %2 dw %4
+   139 00000071 8B3E[2A00]                      mov di,word[val_dp]
+   140 00000075 93                              xchg ax,bx
+   141 00000076 AB                              stosw
+   142 00000077 893E[2A00]                      mov word[val_dp],di
+   143 0000007B 5B                              pop bx
+   144 0000007C EB71                            jmp next
+   145                                  
+   146                                          primitive 'lit',lit
+    27                              <1> header %1,%2,%3,$+2
+    19 0000007E [6B00]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 00000080 036C6974            <2> db %3 + %%count,%1
+    23 00000084 [8600]              <2> xt_ %+ %2 dw %4
+   147 00000086 53                              push bx
+   148 00000087 AD                              lodsw
+   149 00000088 93                              xchg ax,bx
+   150 00000089 EB64                            jmp next
+   151                                  
+   152                                  ; -------------------
+   153                                  ; Stack
+   154                                  ; -------------------
+   155                                  
+   156                                          primitive 'rot',rote
+    27                              <1> header %1,%2,%3,$+2
+    19 0000008B [7E00]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 0000008D 03726F74            <2> db %3 + %%count,%1
+    23 00000091 [9300]              <2> xt_ %+ %2 dw %4
+   157 00000093 5A                              pop dx
+   158 00000094 58                              pop ax
+   159 00000095 52                              push dx
+   160 00000096 53                              push bx
+   161 00000097 93                              xchg ax,bx
+   162 00000098 EB55                            jmp next
+   163                                  
+   164                                          primitive 'drop',drop
+    27                              <1> header %1,%2,%3,$+2
+    19 0000009A [8B00]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 0000009C 0464726F70          <2> db %3 + %%count,%1
+    23 000000A1 [A300]              <2> xt_ %+ %2 dw %4
+   165 000000A3 5B                              pop bx
+   166 000000A4 EB49                            jmp next
+   167                                  
+   168                                          primitive 'dup',dupe
+    27                              <1> header %1,%2,%3,$+2
+    19 000000A6 [9A00]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 000000A8 03647570            <2> db %3 + %%count,%1
+    23 000000AC [AE00]              <2> xt_ %+ %2 dw %4
+   169 000000AE 53                              push bx
+   170 000000AF EB3E                            jmp next
+   171                                  
+   172                                          primitive 'swap',swap
+    27                              <1> header %1,%2,%3,$+2
+    19 000000B1 [A600]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 000000B3 0473776170          <2> db %3 + %%count,%1
+    23 000000B8 [BA00]              <2> xt_ %+ %2 dw %4
+   173 000000BA 58                              pop ax
+   174 000000BB 53                              push bx
+   175 000000BC 93                              xchg ax,bx
+   176 000000BD EB30                            jmp next
+   177                                  
+   178                                  ; -------------------
+   179                                  ; Maths / Logic
+   180                                  ; -------------------
+   181                                  
+   182                                          primitive '+',plus
+    27                              <1> header %1,%2,%3,$+2
+    19 000000BF [B100]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 000000C1 012B                <2> db %3 + %%count,%1
+    23 000000C3 [C500]              <2> xt_ %+ %2 dw %4
+   183 000000C5 58                              pop ax
+   184 000000C6 01C3                            add bx,ax
+   185 000000C8 EB25                            jmp next
+   186                                  
+   187                                          primitive '=',equals
+    27                              <1> header %1,%2,%3,$+2
+    19 000000CA [BF00]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 000000CC 013D                <2> db %3 + %%count,%1
+    23 000000CE [D000]              <2> xt_ %+ %2 dw %4
+   188 000000D0 58                              pop ax
+   189 000000D1 29C3                            sub bx,ax
+   190 000000D3 83EB01                          sub bx,1
+   191 000000D6 19DB                            sbb bx,bx
+   192 000000D8 EB15                            jmp next
+   193                                  
+   194                                  ; -------------------
+   195                                  ; Peek and Poke
+   196                                  ; -------------------
+   197                                  
+   198                                          primitive '@',fetch
+    27                              <1> header %1,%2,%3,$+2
+    19 000000DA [CA00]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 000000DC 0140                <2> db %3 + %%count,%1
+    23 000000DE [E000]              <2> xt_ %+ %2 dw %4
+   199 000000E0 8B1F                            mov bx,word[bx]
+   200 000000E2 EB0B                            jmp next
+   201                                  
+   202                                          primitive '!',store 
+    27                              <1> header %1,%2,%3,$+2
+    19 000000E4 [DA00]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 000000E6 0121                <2> db %3 + %%count,%1
+    23 000000E8 [EA00]              <2> xt_ %+ %2 dw %4
+   203 000000EA 8F07                            pop word[bx]
+   204 000000EC 5B                              pop bx
+   205 000000ED EB00                            jmp next
+   206                                  
+   207                                  ; -------------------
+   208                                  ; Inner Interpreter
+   209                                  ; -------------------
+   210                                  
+   211 000000EF AD                      next    lodsw
+   212 000000F0 97                              xchg di,ax
+   213 000000F1 FF25                            jmp word[di]
+   214                                  
+   215                                  ; -------------------
+   216                                  ; Flow Control
+   217                                  ; -------------------
+   218                                  
+   219                                          primitive '0branch',zero_branch
+    27                              <1> header %1,%2,%3,$+2
+    19 000000F3 [E400]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 000000F5 07306272616E6368    <2> db %3 + %%count,%1
+    23 000000FD [FF00]              <2> xt_ %+ %2 dw %4
+   220 000000FF AD                              lodsw
+   221 00000100 85DB                            test bx,bx
+   222 00000102 7501                            jne zerob_z
+   223 00000104 96                              xchg ax,si
+   224 00000105 5B                      zerob_z pop bx
+   225 00000106 EBE7                            jmp next
+   226                                  
+   227                                          primitive 'branch',branch
+    27                              <1> header %1,%2,%3,$+2
+    19 00000108 [F300]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 0000010A 066272616E6368      <2> db %3 + %%count,%1
+    23 00000111 [1301]              <2> xt_ %+ %2 dw %4
+   228 00000113 8B34                            mov si,word[si]
+   229 00000115 EBD8                            jmp next
+   230                                  
+   231                                          primitive 'execute',execute
+    27                              <1> header %1,%2,%3,$+2
+    19 00000117 [0801]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 00000119 0765786563757465    <2> db %3 + %%count,%1
+    23 00000121 [2301]              <2> xt_ %+ %2 dw %4
+   232 00000123 89DF                            mov di,bx
+   233 00000125 5B                              pop bx
+   234 00000126 FF25                            jmp word[di]
+   235                                  
+   236                                          primitive 'exit',exit
+    27                              <1> header %1,%2,%3,$+2
+    19 00000128 [1701]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 0000012A 0465786974          <2> db %3 + %%count,%1
+    23 0000012F [3101]              <2> xt_ %+ %2 dw %4
+   237 00000131 8B7600                          mov si,word[bp]
+   238 00000134 45                              inc bp
+   239 00000135 45                              inc bp
+   240 00000136 EBB7                            jmp next
+   241                                  
+   242                                  ; -------------------
+   243                                  ; String
+   244                                  ; -------------------
+   245                                  
+   246                                          primitive 'count',count
+    27                              <1> header %1,%2,%3,$+2
+    19 00000138 [2801]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 0000013A 05636F756E74        <2> db %3 + %%count,%1
+    23 00000140 [4201]              <2> xt_ %+ %2 dw %4
+   247 00000142 43                              inc bx
+   248 00000143 53                              push bx
+   249 00000144 8A5FFF                          mov bl,byte[bx-1]
+   250 00000147 B700                            mov bh,0
+   251 00000149 EBA4                            jmp next
+   252                                  
+   253                                          primitive '>number',to_number
+    27                              <1> header %1,%2,%3,$+2
+    19 0000014B [3801]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 0000014D 073E6E756D626572    <2> db %3 + %%count,%1
+    23 00000155 [5701]              <2> xt_ %+ %2 dw %4
+   254 00000157 5F                              pop di
+   255 00000158 59                              pop cx
+   256 00000159 58                              pop ax
+   257 0000015A 85DB                    to_numl test bx,bx
+   258 0000015C 7433                            je to_numz
+   259 0000015E 50                              push ax
+   260 0000015F 8A05                            mov al,byte[di]
+   261 00000161 3C61                            cmp al,'a'
+   262 00000163 7202                            jc to_nums
+   263 00000165 2C20                            sub al,32
+   264 00000167 3C3A                    to_nums cmp al,'9'+1
+   265 00000169 7206                            jc to_numg
+   266 0000016B 3C41                            cmp al,'A'
+   267 0000016D 7223                            jc to_numh
+   268 0000016F 2C07                            sub al,7
+   269 00000171 2C30                    to_numg sub al,48
+   270 00000173 B400                            mov ah,0
+   271 00000175 3A06[3500]                      cmp al,byte[val_base]
+   272 00000179 7317                            jnc to_numh
+   273 0000017B 92                              xchg ax,dx
+   274 0000017C 58                              pop ax
+   275 0000017D 52                              push dx
+   276 0000017E 91                              xchg ax,cx
+   277 0000017F F726[3500]                      mul word[val_base]
+   278 00000183 91                              xchg ax,cx
+   279 00000184 F726[3500]                      mul word[val_base]
+   280 00000188 01D1                            add cx,dx
+   281 0000018A 5A                              pop dx
+   282 0000018B 01D0                            add ax,dx
+   283 0000018D 4B                              dec bx
+   284 0000018E 47                              inc di
+   285 0000018F EBC9                            jmp to_numl
+   286 00000191 50                      to_numz push ax
+   287 00000192 51                      to_numh push cx
+   288 00000193 57                              push di
+   289 00000194 E958FF                          jmp next
+   290                                  
+   291                                  ; -----------------------
+   292                                  ; Terminal Input / Output
+   293                                  ; -----------------------
+   294                                  
+   295                                          primitive 'accept',accept
+    27                              <1> header %1,%2,%3,$+2
+    19 00000197 [4B01]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 00000199 06616363657074      <2> db %3 + %%count,%1
+    23 000001A0 [A201]              <2> xt_ %+ %2 dw %4
+   296 000001A2 5F                              pop di
+   297 000001A3 31C9                            xor cx,cx
+   298 000001A5 E89E00                  acceptl call getchar
+   299 000001A8 3C08                            cmp al,8
+   300 000001AA 7513                            jne acceptn
+   301 000001AC E319                            jcxz acceptb
+   302 000001AE E89C00                          call outchar
+   303 000001B1 B020                            mov al,' '
+   304 000001B3 E89700                          call outchar
+   305 000001B6 B008                            mov al,8
+   306 000001B8 E89200                          call outchar
+   307 000001BB 49                              dec cx
+   308 000001BC 4F                              dec di
+   309 000001BD EBE6                            jmp acceptl
+   310 000001BF 3C0D                    acceptn cmp al,13
+   311 000001C1 7412                            je acceptz
+   312 000001C3 39D9                            cmp cx,bx
+   313 000001C5 7507                            jne accepts
+   314 000001C7 B007                    acceptb mov al,7
+   315 000001C9 E88100                          call outchar
+   316 000001CC EBD7                            jmp acceptl
+   317 000001CE AA                      accepts stosb
+   318 000001CF 41                              inc cx
+   319 000001D0 E87A00                          call outchar
+   320 000001D3 EBD0                            jmp acceptl
+   321 000001D5 E3F0                    acceptz jcxz acceptb
+   322 000001D7 B00D                            mov al,13
+   323 000001D9 E87100                          call outchar
+   324 000001DC B00A                            mov al,10
+   325 000001DE E86C00                          call outchar
+   326 000001E1 89CB                            mov bx,cx
+   327 000001E3 E909FF                          jmp next
+   328                                  
+   329                                          primitive 'word',word
+    27                              <1> header %1,%2,%3,$+2
+    19 000001E6 [9701]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 000001E8 04776F7264          <2> db %3 + %%count,%1
+    23 000001ED [EF01]              <2> xt_ %+ %2 dw %4
+   330 000001EF 8B3E[2A00]                      mov di,word[val_dp]
+   331 000001F3 57                              push di
+   332 000001F4 89DA                            mov dx,bx
+   333 000001F6 8B1E[4A00]                      mov bx,word[val_t_i_b]
+   334 000001FA 89D9                            mov cx,bx
+   335 000001FC 031E[1600]                      add bx,word[val_to_in]
+   336 00000200 030E[2100]                      add cx,word[val_number_t_i_b]
+   337 00000204 39D9                    wordf   cmp cx,bx
+   338 00000206 7415                            je wordz
+   339 00000208 8A07                            mov al,byte[bx]
+   340 0000020A 43                              inc bx
+   341 0000020B 38D0                            cmp al,dl
+   342 0000020D 74F5                            je wordf
+   343 0000020F 47                      wordc   inc di
+   344 00000210 8805                            mov byte[di],al
+   345 00000212 39D9                            cmp cx,bx
+   346 00000214 7407                            je wordz
+   347 00000216 8A07                            mov al,byte[bx]
+   348 00000218 43                              inc bx
+   349 00000219 38D0                            cmp al,dl
+   350 0000021B 75F2                            jne wordc
+   351 0000021D C6450120                wordz   mov byte[di+1],32
+   352 00000221 A1[2A00]                        mov ax,word[val_dp]
+   353 00000224 97                              xchg ax,di
+   354 00000225 29F8                            sub ax,di
+   355 00000227 8805                            mov byte[di],al
+   356 00000229 2B1E[4A00]                      sub bx,word[val_t_i_b]
+   357 0000022D 891E[1600]                      mov word[val_to_in],bx
+   358 00000231 5B                              pop bx
+   359 00000232 E9BAFE                          jmp next
+   360                                  
+   361                                          primitive 'emit',emit
+    27                              <1> header %1,%2,%3,$+2
+    19 00000235 [E601]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 00000237 04656D6974          <2> db %3 + %%count,%1
+    23 0000023C [3E02]              <2> xt_ %+ %2 dw %4
+   362 0000023E 93                              xchg ax,bx
+   363 0000023F E80B00                          call outchar
+   364 00000242 5B                              pop bx
+   365 00000243 E9A9FE                          jmp next
+   366                                  
+   367 00000246 B407                    getchar mov ah,7
+   368 00000248 CD21                            int 021h
+   369 0000024A B400                            mov ah,0
+   370 0000024C C3                              ret
+   371                                  
+   372 0000024D 92                      outchar xchg ax,dx
+   373 0000024E B402                            mov ah,2
+   374 00000250 CD21                            int 021h
+   375 00000252 C3                              ret
+   376                                  
+   377                                  ; -----------------------
+   378                                  ; Dictionary Search
+   379                                  ; -----------------------
+   380                                  
+   381                                          primitive 'find',find
+    27                              <1> header %1,%2,%3,$+2
+    19 00000253 [3502]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 00000255 0466696E64          <2> db %3 + %%count,%1
+    23 0000025A [5C02]              <2> xt_ %+ %2 dw %4
+   382 0000025C BF[4000]                        mov di,val_last
+   383 0000025F 57                      findl   push di
+   384 00000260 53                              push bx
+   385 00000261 8A0F                            mov cl,byte[bx]
+   386 00000263 B500                            mov ch,0
+   387 00000265 41                              inc cx
+   388 00000266 8A4502                  findc   mov al,byte[di+2]
+   389 00000269 247F                            and al,07Fh
+   390 0000026B 3A07                            cmp al,byte[bx]
+   391 0000026D 740E                            je findm
+   392 0000026F 5B                              pop bx
+   393 00000270 5F                              pop di
+   394 00000271 8B3D                            mov di,word[di]
+   395 00000273 85FF                            test di,di
+   396 00000275 75E8                            jne findl
+   397 00000277 53                      findnf  push bx
+   398 00000278 31DB                            xor bx,bx
+   399 0000027A E972FE                          jmp next
+   400 0000027D 47                      findm   inc di
+   401 0000027E 43                              inc bx
+   402 0000027F E2E5                            loop findc
+   403 00000281 5B                              pop bx
+   404 00000282 5F                              pop di
+   405 00000283 BB0100                          mov bx,1
+   406 00000286 47                              inc di
+   407 00000287 47                              inc di
+   408 00000288 8A05                            mov al,byte[di]
+   409 0000028A A880                            test al,080h
+   410 0000028C 7502                            jne findi
+   411 0000028E F7DB                            neg bx
+   412 00000290 83E01F                  findi   and ax,31
+   413 00000293 01C7                            add di,ax
+   414 00000295 47                              inc di
+   415 00000296 57                              push di
+   416 00000297 E955FE                          jmp next
+   417                                  
+   418                                  ; -----------------------
+   419                                  ; Colon Definition
+   420                                  ; -----------------------
+   421                                  
+   422                                          colon ':',colon
+    31                              <1> header %1,%2,%3,docolon
+    19 0000029A [5302]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 0000029C 013A                <2> db %3 + %%count,%1
+    23 0000029E [AC02]              <2> xt_ %+ %2 dw %4
+   423 000002A0 [8400]FFFF[0A00]-               dw xt_lit,-1,xt_state,xt_store,xt_create
+   423 000002A6 [E800][D602]       
+   424 000002AA [0D03]                          dw xt_do_semi_code
+   425 000002AC 4D                      docolon dec bp
+   426 000002AD 4D                              dec bp
+   427 000002AE 897600                          mov word[bp],si
+   428 000002B1 8D7502                          lea si,[di+2]
+   429 000002B4 E938FE                          jmp next
+   430                                  
+   431                                          colon ';',semicolon,immediate
+    31                              <1> header %1,%2,%3,docolon
+    19 000002B7 [9A02]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 000002B9 813B                <2> db %3 + %%count,%1
+    23 000002BB [AC02]              <2> xt_ %+ %2 dw %4
+   432 000002BD [8400][2F01][6F00]-             dw xt_lit,xt_exit,xt_comma,xt_lit,0,xt_state
+   432 000002C3 [8400]0000[0A00]   
+   433 000002C9 [E800][2F01]                    dw xt_store,xt_exit
+   434                                  
+   435                                  ; -----------------------
+   436                                  ; Headers
+   437                                  ; -----------------------
+   438                                  
+   439                                          colon 'create',create
+    31                              <1> header %1,%2,%3,docolon
+    19 000002CD [B702]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 000002CF 06637265617465      <2> db %3 + %%count,%1
+    23 000002D6 [AC02]              <2> xt_ %+ %2 dw %4
+   440 000002D8 [2800][DE00][3E00]-             dw xt_dp,xt_fetch,xt_last,xt_fetch,xt_comma
+   440 000002DE [DE00][6F00]       
+   441 000002E2 [3E00][E800][8400]-             dw xt_last,xt_store,xt_lit,32,xt_word,xt_count
+   441 000002E8 2000[ED01][4001]   
+   442 000002EE [C300][2800][E800]-             dw xt_plus,xt_dp,xt_store,xt_lit,0,xt_comma
+   442 000002F4 [8400]0000[6F00]   
+   443 000002FA [0D03]                          dw xt_do_semi_code
+   444 000002FC 53                      dovar   push bx
+   445 000002FD 8D5D02                          lea bx,[di+2]
+   446 00000300 E9ECFD                          jmp next
+   447                                  
+   448                                          primitive '(;code)',do_semi_code
+    27                              <1> header %1,%2,%3,$+2
+    19 00000303 [CD02]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 00000305 07283B636F646529    <2> db %3 + %%count,%1
+    23 0000030D [0F03]              <2> xt_ %+ %2 dw %4
+   449 0000030F 8B3E[4000]                      mov di,word[val_last]
+   450 00000313 8A4502                          mov al,byte[di+2]
+   451 00000316 83E01F                          and ax,31
+   452 00000319 01C7                            add di,ax
+   453 0000031B 897503                          mov word[di+3],si
+   454 0000031E 8B7600                          mov si,word[bp]
+   455 00000321 45                              inc bp
+   456 00000322 45                              inc bp
+   457 00000323 E9C9FD                          jmp next
+   458                                  
+   459                                  ; -----------------------
+   460                                  ; Constants
+   461                                  ; -----------------------
+   462                                  
+   463                                          colon 'constant',constant
+    31                              <1> header %1,%2,%3,docolon
+    19 00000326 [0303]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 00000328 08636F6E7374616E74  <2> db %3 + %%count,%1
+    23 00000331 [AC02]              <2> xt_ %+ %2 dw %4
+   464 00000333 [D602][6F00][0D03]              dw xt_create,xt_comma,xt_do_semi_code
+   465 00000339 53                      doconst push bx
+   466 0000033A 8B5D02                          mov bx,word[di+2]
+   467 0000033D E9AFFD                          jmp next
+   468                                  
+   469                                  ; -----------------------
+   470                                  ; Outer Interpreter
+   471                                  ; -----------------------
+   472                                  
+   473                                  final:
+   474                                          colon 'interpret',interpret
+    31                              <1> header %1,%2,%3,docolon
+    19 00000340 [2603]              <2> %%head dw head
+    20                              <2> %define head %%head
+    21                              <2> %strlen %%count %1
+    22 00000342 09696E746572707265- <2> db %3 + %%count,%1
+    22 0000034B 74                  <2>
+    23 0000034C [AC02]              <2> xt_ %+ %2 dw %4
+   475 0000034E [1F00][DE00][1400]-     interpt dw xt_number_t_i_b,xt_fetch,xt_to_in,xt_fetch
+   475 00000354 [DE00]             
+   476 00000356 [CE00][FD00][7003]-             dw xt_equals,xt_zero_branch,intpar,xt_t_i_b
+   476 0000035C [4800]             
+   477 0000035E [8400]3200[A001]-               dw xt_lit,50,xt_accept,xt_number_t_i_b,xt_store
+   477 00000364 [1F00][E800]       
+   478 00000368 [8400]0000[1400]-               dw xt_lit,0,xt_to_in,xt_store
+   478 0000036E [E800]             
+   479 00000370 [8400]2000[ED01]-       intpar  dw xt_lit,32,xt_word,xt_find,xt_dupe
+   479 00000376 [5A02][AC00]       
+   480 0000037A [FD00][9403][0A00]-             dw xt_zero_branch,intnf,xt_state,xt_fetch
+   480 00000380 [DE00]             
+   481 00000382 [CE00][FD00][8E03]-             dw xt_equals,xt_zero_branch,intexc,xt_comma
+   481 00000388 [6F00]             
+   482 0000038A [1101][CE03]                    dw xt_branch,intdone
+   483 0000038E [2101][1101][CE03]      intexc  dw xt_execute,xt_branch,intdone
+   484 00000394 [AC00][9100][4001]-     intnf   dw xt_dupe,xt_rote,xt_count,xt_to_number
+   484 0000039A [5501]             
+   485 0000039C [FD00][BA03][0A00]-             dw xt_zero_branch,intskip,xt_state,xt_fetch
+   485 000003A2 [DE00]             
+   486 000003A4 [FD00][B803][3E00]-             dw xt_zero_branch,intnc,xt_last,xt_fetch,xt_dupe
+   486 000003AA [DE00][AC00]       
+   487 000003AE [DE00][3E00][E800]-             dw xt_fetch,xt_last,xt_store,xt_dp,xt_store
+   487 000003B4 [2800][E800]       
+   488 000003B8 [5400]                  intnc   dw xt_abort
+   489 000003BA [A100][A100][0A00]-     intskip dw xt_drop, xt_drop, xt_state, xt_fetch
+   489 000003C0 [DE00]             
+   490 000003C2 [FD00][CE03][8400]-             dw xt_zero_branch,intdone,xt_lit,xt_lit,xt_comma
+   490 000003C8 [8400][6F00]       
+   491 000003CC [6F00]                          dw xt_comma
+   492 000003CE [1101][4E03]            intdone dw xt_branch,interpt
+   493                                  
+   494                                  freemem:
+   495                                  
