@@ -1,0 +1,12 @@
+
+# NASM / ASM outputs
+*.com
+*.bin
+*.o
+itsy
+
+# Backup / temporary files
+*~
+*.swp
+*.bak
+.DS_Store
