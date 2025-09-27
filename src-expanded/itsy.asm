@@ -6,13 +6,10 @@ immediate equ 080h
 
 ; Format of the linked list entries
 
-; | Field                | Description                          |
-; | -------------------- | ------------------------------------ |
-; | Back-link            | Pointer to previous dictionary entry |
-; | Name                 | Length byte + ASCII name of the word |
-; | Execution token (xt) | Pointer to machine code for the word |
-; | Value                | Runtime storage for the variable     |
-
+;  LFA         =  LINK FIELD ADDRESS: a pointer to the next DEA
+;  NFA         =  NAME FIELD ADDRESS: a pointer to a name buffer
+;  CFA         =  CODE FIELD ADDRESS : a pointer to executable code
+;  DFA         =  DATA FIELD ADDRESS : a pointer to data, empty for primitives
 
 ; macros during dev
 %macro header 4
@@ -20,7 +17,7 @@ immediate equ 080h
 %define head %%head
 %strlen %%count %1
 db %3 + %%count,%1
-xt_ %+ %2 dw %4
+cfa_ %+ %2 dw %4
 %endmacro
 
 %macro primitive 2-3 0
@@ -33,17 +30,17 @@ header %1,%2,%3,docolon
 
 %macro constant 3
 header %1,%2,0,doconst
-val_ %+ %2 dw %3
+dfa_ %+ %2 dw %3
 %endmacro
 
 %macro variable 3
 header %1,%2,0,dovar
-val_ %+ %2 dw %3
+dfa_ %+ %2 dw %3
 %endmacro
 
 ; this is a dos com, set origin to 100h and just to 
-        org 0100h
-        jmp xt_abort+2
+                    org 0100h
+                    jmp cfa_abort+2
 
 ; -------------------
 ; Forth Variables
@@ -58,99 +55,101 @@ val_ %+ %2 dw %3
 ; | base  | Numeric base for number parsing/output               |
 ; | last  | Most recently compiled word or last dictionary entry |
 
-; assembly label prefixes
+; forth word - state
+lfa_state:          dw 0
+nfa_state:          db 5,'state'
+cfa_state:          dw dovar
+dfa_state:          dw 0
 
-; | Name Prefix | Description                                            |
-; | ----------- | ------------------------------------------------------ |
-; | fw_         | a forth word                                           |
-; | xt_         | Execution token (pointer to machine code for the word) |
-; | val_        | Runtime value of the variable                          |
+; forth word - >in
+lfa_to_in:          dw lfa_state
+nfa_to_in:          db 3,'>in'
+cfa_to_in:          dw  dovar
+dfa_to_in:          dw 0
 
-; state
-fw_state:
-        dw 0
-        db                  5,'state'
-        xt_state:           dw dovar
-        val_state:          dw 0
+; forth word - #tib
+lfa_ntib:           dw lfa_to_in
+nfa_ntib:           db 4,'#tib'
+cfa_ntib:           dw  dovar
+dfa_ntib:           dw 0
 
-; >in
-fw_to_in:
-        dw fw_state
-        db                  3,'>in'
-        xt_to_in:           dw  dovar
-        val_to_in:          dw 0
+; forth word - dp
+lfa_dp:             dw lfa_ntib
+nfa_dp:             db 2,'dp'
+cfa_dp:             dw  dovar
+dfa_dp:             dw freemem
 
-; #tib
-fw_number_t_i_b:
-        dw fw_to_in
-        db                  4,'#tib'
-        xt_number_t_i_b:    dw  dovar
-        val_number_t_i_b:   dw 0
+; forth word - base
+lfa_base:           dw lfa_dp
+nfa_base:           db 4,'base'
+cfa_base:           dw  dovar
+dfa_base:           dw 10
 
-; dp
-fw_dp:
-        dw fw_number_t_i_b
-        db                  2,'dp'
-        xt_dp:              dw  dovar
-        val_dp:             dw freemem
+; forth word - last
+lfa_last:           dw lfa_base
+nfa_last:           db 4,'last'
+cfa_last:           dw  dovar
+dfa_last:           dw final
 
-; base
-fw_base:
-        dw fw_dp
-        db                  4,'base'
-        xt_base:            dw  dovar
-        val_base:           dw 10
+; forth word - tib
+lfa_tib:            dw lfa_last
+nfa_tib:            db 3,'tib'
+cfa_tib:            dw  doconst
+dfa_tib:            dw 32768
 
-; last
-fw_last:
-        dw fw_base
-        db                  4,'last'
-        xt_last:            dw  dovar
-        val_last:           dw final
-
-; tib
-fw_t_i_b:
-        dw fw_last
-        db                  3,'tib'
-        xt_t_i_b:           dw  doconst
-        val_t_i_b:          dw 32768
-
-        ; set defined head to last primitive expanded during dev
-        %define head fw_t_i_b
-
+;----------------------------------------------------
+; System Foundational Primitives
+;   Needed to initialize the Forth environment and 
+;   support early runtime operations
+;----------------------------------------------------
 ; -------------------
-; Initialisation
+; Abort Primitive - Forth System Initialization Word
 ; -------------------
 
-        primitive 'abort',abort
-        mov ax,word[val_number_t_i_b]
-        mov word[val_to_in],ax
-        xor bp,bp
-        mov word[val_state],bp
-        mov sp,-256
-        mov si,xt_interpret+2
-        jmp next
+; forth word - abort (primitive)
+lfa_abort:          dw lfa_tib     ; prev-link
+nfa_abort:          db 5,'abort'    ; name len+string
+cfa_abort:          dw $+2          ; xt
+
+                    mov ax,word[dfa_ntib]
+                    mov word[dfa_to_in],ax
+                    xor bp,bp
+                    mov word[dfa_state],bp
+                    mov sp,-256
+                    mov si,cfa_interpret+2
+                    jmp next
 
 ; -------------------
-; Compilation
+; Compilation Primitives - Forth Dictionary Storage and Literal Embedding Words
 ; -------------------
 
-        primitive ',',comma
-        mov di,word[val_dp]
-        xchg ax,bx
-        stosw
-        mov word[val_dp],di
-        pop bx
-        jmp next
+; forth word - comma (primitive)
+lfa_comma:          dw lfa_abort     ; prev-link
+nfa_comma:          db 1,','        ; name len+string
+cfa_comma:          dw $+2          ; xt
 
-        primitive 'lit',lit
-        push bx
-        lodsw
-        xchg ax,bx
-        jmp next
+                    mov di,word[dfa_dp]
+                    xchg ax,bx
+                    stosw
+                    mov word[dfa_dp],di
+                    pop bx
+                    jmp next
+
+; forth word - lit (primitive)
+lfa_lit:            dw lfa_comma     ; prev-link
+nfa_lit:            db 3,'lit'    ; name len+string
+cfa_lit:            dw $+2          ; xt
+
+                    push bx
+                    lodsw
+                    xchg ax,bx
+                    jmp next
+
+; set defined head to last primitive expanded during dev
+%define head lfa_lit
 
 ; -------------------
-; Stack
+; Stack Primitives - Forth Stack Manipulation Words
 ; -------------------
 
         primitive 'rot',rote
@@ -176,7 +175,7 @@ fw_t_i_b:
         jmp next
 
 ; -------------------
-; Maths / Logic
+; Math and Logic Primitives - Forth Arithmetic and Logical Words
 ; -------------------
 
         primitive '+',plus
@@ -192,7 +191,7 @@ fw_t_i_b:
         jmp next
 
 ; -------------------
-; Peek and Poke
+; Memory Access Primitives - Forth Peek and Poke Words
 ; -------------------
 
         primitive '@',fetch
@@ -204,16 +203,22 @@ fw_t_i_b:
         pop bx
         jmp next
 
-; -------------------
-; Inner Interpreter
-; -------------------
+;----------------------------------------------------
+; Inner Interpreter - Forth Fetch-and-Execute loop
+;----------------------------------------------------
 
 next    lodsw
         xchg di,ax
         jmp word[di]
 
+;----------------------------------------------------
+; Interpreter-Dependent Primitives
+;   Rely on the inner interpreter being in place to
+;   execute via code field addresses
+;----------------------------------------------------
+
 ; -------------------
-; Flow Control
+; Colon Flow Control Primitives - Forth Conditional and Unconditional Execution Words
 ; -------------------
 
         primitive '0branch',zero_branch
@@ -240,7 +245,7 @@ zerob_z pop bx
         jmp next
 
 ; -------------------
-; String
+; String Primitives - Forth String Words
 ; -------------------
 
         primitive 'count',count
@@ -268,15 +273,15 @@ to_nums cmp al,'9'+1
         sub al,7
 to_numg sub al,48
         mov ah,0
-        cmp al,byte[val_base]
+        cmp al,byte[dfa_base]
         jnc to_numh
         xchg ax,dx
         pop ax
         push dx
         xchg ax,cx
-        mul word[val_base]
+        mul word[dfa_base]
         xchg ax,cx
-        mul word[val_base]
+        mul word[dfa_base]
         add cx,dx
         pop dx
         add ax,dx
@@ -289,7 +294,7 @@ to_numh push cx
         jmp next
 
 ; -----------------------
-; Terminal Input / Output
+; Terminal I/O Primitives - Forth I/O Words
 ; -----------------------
 
         primitive 'accept',accept
@@ -327,13 +332,13 @@ acceptz jcxz acceptb
         jmp next
 
         primitive 'word',word
-        mov di,word[val_dp]
+        mov di,word[dfa_dp]
         push di
         mov dx,bx
-        mov bx,word[val_t_i_b]
+        mov bx,word[dfa_tib]
         mov cx,bx
-        add bx,word[val_to_in]
-        add cx,word[val_number_t_i_b]
+        add bx,word[dfa_to_in]
+        add cx,word[dfa_ntib]
 wordf   cmp cx,bx
         je wordz
         mov al,byte[bx]
@@ -349,12 +354,12 @@ wordc   inc di
         cmp al,dl
         jne wordc
 wordz   mov byte[di+1],32
-        mov ax,word[val_dp]
+        mov ax,word[dfa_dp]
         xchg ax,di
         sub ax,di
         mov byte[di],al
-        sub bx,word[val_t_i_b]
-        mov word[val_to_in],bx
+        sub bx,word[dfa_tib]
+        mov word[dfa_to_in],bx
         pop bx
         jmp next
 
@@ -375,11 +380,11 @@ outchar xchg ax,dx
         ret
 
 ; -----------------------
-; Dictionary Search
+; Search Primitive - Forth Dictionary Lookup Word
 ; -----------------------
 
         primitive 'find',find
-        mov di,val_last
+        mov di,dfa_last
 findl   push di
         push bx
         mov cl,byte[bx]
@@ -416,12 +421,12 @@ findi   and ax,31
         jmp next
 
 ; -----------------------
-; Colon Definition
+; Colon Definitions - Forth Colon Start and End Words
 ; -----------------------
 
         colon ':',colon
-        dw xt_lit,-1,xt_state,xt_store,xt_create
-        dw xt_do_semi_code
+        dw cfa_lit,-1,cfa_state,cfa_store,cfa_create
+        dw cfa_do_semi_code
 docolon dec bp
         dec bp
         mov word[bp],si
@@ -429,24 +434,24 @@ docolon dec bp
         jmp next
 
         colon ';',semicolon,immediate
-        dw xt_lit,xt_exit,xt_comma,xt_lit,0,xt_state
-        dw xt_store,xt_exit
+        dw cfa_lit,cfa_exit,cfa_comma,cfa_lit,0,cfa_state
+        dw cfa_store,cfa_exit
 
 ; -----------------------
-; Headers
+; Create and Code Definitions - Forth Low-Level Colon Words
 ; -----------------------
 
         colon 'create',create
-        dw xt_dp,xt_fetch,xt_last,xt_fetch,xt_comma
-        dw xt_last,xt_store,xt_lit,32,xt_word,xt_count
-        dw xt_plus,xt_dp,xt_store,xt_lit,0,xt_comma
-        dw xt_do_semi_code
+        dw cfa_dp,cfa_fetch,cfa_last,cfa_fetch,cfa_comma
+        dw cfa_last,cfa_store,cfa_lit,32,cfa_word,cfa_count
+        dw cfa_plus,cfa_dp,cfa_store,cfa_lit,0,cfa_comma
+        dw cfa_do_semi_code
 dovar   push bx
         lea bx,[di+2]
         jmp next
 
         primitive '(;code)',do_semi_code
-        mov di,word[val_last]
+        mov di,word[dfa_last]
         mov al,byte[di+2]
         and ax,31
         add di,ax
@@ -457,39 +462,39 @@ dovar   push bx
         jmp next
 
 ; -----------------------
-; Constants
+; Constant Definition - Forth Constant Word
 ; -----------------------
 
         colon 'constant',constant
-        dw xt_create,xt_comma,xt_do_semi_code
+        dw cfa_create,cfa_comma,cfa_do_semi_code
 doconst push bx
         mov bx,word[di+2]
         jmp next
 
 ; -----------------------
-; Outer Interpreter
+; Outer Interpreter – Forth REPL (Process input, execute words, handle control flow)
 ; -----------------------
 
 final:
         colon 'interpret',interpret
-interpt dw xt_number_t_i_b,xt_fetch,xt_to_in,xt_fetch
-        dw xt_equals,xt_zero_branch,intpar,xt_t_i_b
-        dw xt_lit,50,xt_accept,xt_number_t_i_b,xt_store
-        dw xt_lit,0,xt_to_in,xt_store
-intpar  dw xt_lit,32,xt_word,xt_find,xt_dupe
-        dw xt_zero_branch,intnf,xt_state,xt_fetch
-        dw xt_equals,xt_zero_branch,intexc,xt_comma
-        dw xt_branch,intdone
-intexc  dw xt_execute,xt_branch,intdone
-intnf   dw xt_dupe,xt_rote,xt_count,xt_to_number
-        dw xt_zero_branch,intskip,xt_state,xt_fetch
-        dw xt_zero_branch,intnc,xt_last,xt_fetch,xt_dupe
-        dw xt_fetch,xt_last,xt_store,xt_dp,xt_store
-intnc   dw xt_abort
-intskip dw xt_drop, xt_drop, xt_state, xt_fetch
-        dw xt_zero_branch,intdone,xt_lit,xt_lit,xt_comma
-        dw xt_comma
-intdone dw xt_branch,interpt
+interpt dw cfa_ntib,cfa_fetch,cfa_to_in,cfa_fetch
+        dw cfa_equals,cfa_zero_branch,intpar,cfa_tib
+        dw cfa_lit,50,cfa_accept,cfa_ntib,cfa_store
+        dw cfa_lit,0,cfa_to_in,cfa_store
+intpar  dw cfa_lit,32,cfa_word,cfa_find,cfa_dupe
+        dw cfa_zero_branch,intnf,cfa_state,cfa_fetch
+        dw cfa_equals,cfa_zero_branch,intexc,cfa_comma
+        dw cfa_branch,intdone
+intexc  dw cfa_execute,cfa_branch,intdone
+intnf   dw cfa_dupe,cfa_rote,cfa_count,cfa_to_number
+        dw cfa_zero_branch,intskip,cfa_state,cfa_fetch
+        dw cfa_zero_branch,intnc,cfa_last,cfa_fetch,cfa_dupe
+        dw cfa_fetch,cfa_last,cfa_store,cfa_dp,cfa_store
+intnc   dw cfa_abort
+intskip dw cfa_drop, cfa_drop, cfa_state, cfa_fetch
+        dw cfa_zero_branch,intdone,cfa_lit,cfa_lit,cfa_comma
+        dw cfa_comma
+intdone dw cfa_branch,interpt
 
 freemem:
 
