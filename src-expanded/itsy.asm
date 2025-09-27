@@ -145,6 +145,7 @@ cfa_lit:            dw $+2          ; xt
                     xchg ax,bx
                     jmp next
 
+; LEFT OFF HERE!
 ; set defined head to last primitive expanded during dev
 %define head lfa_lit
 
@@ -152,7 +153,7 @@ cfa_lit:            dw $+2          ; xt
 ; Stack Primitives - Forth Stack Manipulation Words
 ; -------------------
 
-        primitive 'rot',rote
+        primitive 'rot',rot
         pop dx
         pop ax
         push dx
@@ -486,7 +487,7 @@ intpar  dw cfa_lit,32,cfa_word,cfa_find,cfa_dupe
         dw cfa_equals,cfa_zero_branch,intexc,cfa_comma
         dw cfa_branch,intdone
 intexc  dw cfa_execute,cfa_branch,intdone
-intnf   dw cfa_dupe,cfa_rote,cfa_count,cfa_to_number
+intnf   dw cfa_dupe,cfa_rot,cfa_count,cfa_to_number
         dw cfa_zero_branch,intskip,cfa_state,cfa_fetch
         dw cfa_zero_branch,intnc,cfa_last,cfa_fetch,cfa_dupe
         dw cfa_fetch,cfa_last,cfa_store,cfa_dp,cfa_store

@@ -145,481 +145,482 @@
    145 00000088 93                                          xchg ax,bx
    146 00000089 EB64                                        jmp next
    147                                  
-   148                                  ; set defined head to last primitive expanded during dev
-   149                                  %define head lfa_lit
-   150                                  
-   151                                  ; -------------------
-   152                                  ; Stack Primitives - Forth Stack Manipulation Words
-   153                                  ; -------------------
-   154                                  
-   155                                          primitive 'rot',rote
+   148                                  ; LEFT OFF HERE!
+   149                                  ; set defined head to last primitive expanded during dev
+   150                                  %define head lfa_lit
+   151                                  
+   152                                  ; -------------------
+   153                                  ; Stack Primitives - Forth Stack Manipulation Words
+   154                                  ; -------------------
+   155                                  
+   156                                          primitive 'rot',rot
     24                              <1> header %1,%2,%3,$+2
     16 0000008B [7E00]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 0000008D 03726F74            <2> db %3 + %%count,%1
     20 00000091 [9300]              <2> cfa_ %+ %2 dw %4
-   156 00000093 5A                              pop dx
-   157 00000094 58                              pop ax
-   158 00000095 52                              push dx
-   159 00000096 53                              push bx
-   160 00000097 93                              xchg ax,bx
-   161 00000098 EB55                            jmp next
-   162                                  
-   163                                          primitive 'drop',drop
+   157 00000093 5A                              pop dx
+   158 00000094 58                              pop ax
+   159 00000095 52                              push dx
+   160 00000096 53                              push bx
+   161 00000097 93                              xchg ax,bx
+   162 00000098 EB55                            jmp next
+   163                                  
+   164                                          primitive 'drop',drop
     24                              <1> header %1,%2,%3,$+2
     16 0000009A [8B00]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 0000009C 0464726F70          <2> db %3 + %%count,%1
     20 000000A1 [A300]              <2> cfa_ %+ %2 dw %4
-   164 000000A3 5B                              pop bx
-   165 000000A4 EB49                            jmp next
-   166                                  
-   167                                          primitive 'dup',dupe
+   165 000000A3 5B                              pop bx
+   166 000000A4 EB49                            jmp next
+   167                                  
+   168                                          primitive 'dup',dupe
     24                              <1> header %1,%2,%3,$+2
     16 000000A6 [9A00]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 000000A8 03647570            <2> db %3 + %%count,%1
     20 000000AC [AE00]              <2> cfa_ %+ %2 dw %4
-   168 000000AE 53                              push bx
-   169 000000AF EB3E                            jmp next
-   170                                  
-   171                                          primitive 'swap',swap
+   169 000000AE 53                              push bx
+   170 000000AF EB3E                            jmp next
+   171                                  
+   172                                          primitive 'swap',swap
     24                              <1> header %1,%2,%3,$+2
     16 000000B1 [A600]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 000000B3 0473776170          <2> db %3 + %%count,%1
     20 000000B8 [BA00]              <2> cfa_ %+ %2 dw %4
-   172 000000BA 58                              pop ax
-   173 000000BB 53                              push bx
-   174 000000BC 93                              xchg ax,bx
-   175 000000BD EB30                            jmp next
-   176                                  
-   177                                  ; -------------------
-   178                                  ; Math and Logic Primitives - Forth Arithmetic and Logical Words
-   179                                  ; -------------------
-   180                                  
-   181                                          primitive '+',plus
+   173 000000BA 58                              pop ax
+   174 000000BB 53                              push bx
+   175 000000BC 93                              xchg ax,bx
+   176 000000BD EB30                            jmp next
+   177                                  
+   178                                  ; -------------------
+   179                                  ; Math and Logic Primitives - Forth Arithmetic and Logical Words
+   180                                  ; -------------------
+   181                                  
+   182                                          primitive '+',plus
     24                              <1> header %1,%2,%3,$+2
     16 000000BF [B100]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 000000C1 012B                <2> db %3 + %%count,%1
     20 000000C3 [C500]              <2> cfa_ %+ %2 dw %4
-   182 000000C5 58                              pop ax
-   183 000000C6 01C3                            add bx,ax
-   184 000000C8 EB25                            jmp next
-   185                                  
-   186                                          primitive '=',equals
+   183 000000C5 58                              pop ax
+   184 000000C6 01C3                            add bx,ax
+   185 000000C8 EB25                            jmp next
+   186                                  
+   187                                          primitive '=',equals
     24                              <1> header %1,%2,%3,$+2
     16 000000CA [BF00]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 000000CC 013D                <2> db %3 + %%count,%1
     20 000000CE [D000]              <2> cfa_ %+ %2 dw %4
-   187 000000D0 58                              pop ax
-   188 000000D1 29C3                            sub bx,ax
-   189 000000D3 83EB01                          sub bx,1
-   190 000000D6 19DB                            sbb bx,bx
-   191 000000D8 EB15                            jmp next
-   192                                  
-   193                                  ; -------------------
-   194                                  ; Memory Access Primitives - Forth Peek and Poke Words
-   195                                  ; -------------------
-   196                                  
-   197                                          primitive '@',fetch
+   188 000000D0 58                              pop ax
+   189 000000D1 29C3                            sub bx,ax
+   190 000000D3 83EB01                          sub bx,1
+   191 000000D6 19DB                            sbb bx,bx
+   192 000000D8 EB15                            jmp next
+   193                                  
+   194                                  ; -------------------
+   195                                  ; Memory Access Primitives - Forth Peek and Poke Words
+   196                                  ; -------------------
+   197                                  
+   198                                          primitive '@',fetch
     24                              <1> header %1,%2,%3,$+2
     16 000000DA [CA00]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 000000DC 0140                <2> db %3 + %%count,%1
     20 000000DE [E000]              <2> cfa_ %+ %2 dw %4
-   198 000000E0 8B1F                            mov bx,word[bx]
-   199 000000E2 EB0B                            jmp next
-   200                                  
-   201                                          primitive '!',store 
+   199 000000E0 8B1F                            mov bx,word[bx]
+   200 000000E2 EB0B                            jmp next
+   201                                  
+   202                                          primitive '!',store 
     24                              <1> header %1,%2,%3,$+2
     16 000000E4 [DA00]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 000000E6 0121                <2> db %3 + %%count,%1
     20 000000E8 [EA00]              <2> cfa_ %+ %2 dw %4
-   202 000000EA 8F07                            pop word[bx]
-   203 000000EC 5B                              pop bx
-   204 000000ED EB00                            jmp next
-   205                                  
-   206                                  ;----------------------------------------------------
-   207                                  ; Inner Interpreter - Forth Fetch-and-Execute loop
-   208                                  ;----------------------------------------------------
-   209                                  
-   210 000000EF AD                      next    lodsw
-   211 000000F0 97                              xchg di,ax
-   212 000000F1 FF25                            jmp word[di]
-   213                                  
-   214                                  ;----------------------------------------------------
-   215                                  ; Interpreter-Dependent Primitives
-   216                                  ;   Rely on the inner interpreter being in place to
-   217                                  ;   execute via code field addresses
-   218                                  ;----------------------------------------------------
-   219                                  
-   220                                  ; -------------------
-   221                                  ; Colon Flow Control Primitives - Forth Conditional and Unconditional Execution Words
-   222                                  ; -------------------
-   223                                  
-   224                                          primitive '0branch',zero_branch
+   203 000000EA 8F07                            pop word[bx]
+   204 000000EC 5B                              pop bx
+   205 000000ED EB00                            jmp next
+   206                                  
+   207                                  ;----------------------------------------------------
+   208                                  ; Inner Interpreter - Forth Fetch-and-Execute loop
+   209                                  ;----------------------------------------------------
+   210                                  
+   211 000000EF AD                      next    lodsw
+   212 000000F0 97                              xchg di,ax
+   213 000000F1 FF25                            jmp word[di]
+   214                                  
+   215                                  ;----------------------------------------------------
+   216                                  ; Interpreter-Dependent Primitives
+   217                                  ;   Rely on the inner interpreter being in place to
+   218                                  ;   execute via code field addresses
+   219                                  ;----------------------------------------------------
+   220                                  
+   221                                  ; -------------------
+   222                                  ; Colon Flow Control Primitives - Forth Conditional and Unconditional Execution Words
+   223                                  ; -------------------
+   224                                  
+   225                                          primitive '0branch',zero_branch
     24                              <1> header %1,%2,%3,$+2
     16 000000F3 [E400]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 000000F5 07306272616E6368    <2> db %3 + %%count,%1
     20 000000FD [FF00]              <2> cfa_ %+ %2 dw %4
-   225 000000FF AD                              lodsw
-   226 00000100 85DB                            test bx,bx
-   227 00000102 7501                            jne zerob_z
-   228 00000104 96                              xchg ax,si
-   229 00000105 5B                      zerob_z pop bx
-   230 00000106 EBE7                            jmp next
-   231                                  
-   232                                          primitive 'branch',branch
+   226 000000FF AD                              lodsw
+   227 00000100 85DB                            test bx,bx
+   228 00000102 7501                            jne zerob_z
+   229 00000104 96                              xchg ax,si
+   230 00000105 5B                      zerob_z pop bx
+   231 00000106 EBE7                            jmp next
+   232                                  
+   233                                          primitive 'branch',branch
     24                              <1> header %1,%2,%3,$+2
     16 00000108 [F300]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 0000010A 066272616E6368      <2> db %3 + %%count,%1
     20 00000111 [1301]              <2> cfa_ %+ %2 dw %4
-   233 00000113 8B34                            mov si,word[si]
-   234 00000115 EBD8                            jmp next
-   235                                  
-   236                                          primitive 'execute',execute
+   234 00000113 8B34                            mov si,word[si]
+   235 00000115 EBD8                            jmp next
+   236                                  
+   237                                          primitive 'execute',execute
     24                              <1> header %1,%2,%3,$+2
     16 00000117 [0801]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 00000119 0765786563757465    <2> db %3 + %%count,%1
     20 00000121 [2301]              <2> cfa_ %+ %2 dw %4
-   237 00000123 89DF                            mov di,bx
-   238 00000125 5B                              pop bx
-   239 00000126 FF25                            jmp word[di]
-   240                                  
-   241                                          primitive 'exit',exit
+   238 00000123 89DF                            mov di,bx
+   239 00000125 5B                              pop bx
+   240 00000126 FF25                            jmp word[di]
+   241                                  
+   242                                          primitive 'exit',exit
     24                              <1> header %1,%2,%3,$+2
     16 00000128 [1701]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 0000012A 0465786974          <2> db %3 + %%count,%1
     20 0000012F [3101]              <2> cfa_ %+ %2 dw %4
-   242 00000131 8B7600                          mov si,word[bp]
-   243 00000134 45                              inc bp
-   244 00000135 45                              inc bp
-   245 00000136 EBB7                            jmp next
-   246                                  
-   247                                  ; -------------------
-   248                                  ; String Primitives - Forth String Words
-   249                                  ; -------------------
-   250                                  
-   251                                          primitive 'count',count
+   243 00000131 8B7600                          mov si,word[bp]
+   244 00000134 45                              inc bp
+   245 00000135 45                              inc bp
+   246 00000136 EBB7                            jmp next
+   247                                  
+   248                                  ; -------------------
+   249                                  ; String Primitives - Forth String Words
+   250                                  ; -------------------
+   251                                  
+   252                                          primitive 'count',count
     24                              <1> header %1,%2,%3,$+2
     16 00000138 [2801]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 0000013A 05636F756E74        <2> db %3 + %%count,%1
     20 00000140 [4201]              <2> cfa_ %+ %2 dw %4
-   252 00000142 43                              inc bx
-   253 00000143 53                              push bx
-   254 00000144 8A5FFF                          mov bl,byte[bx-1]
-   255 00000147 B700                            mov bh,0
-   256 00000149 EBA4                            jmp next
-   257                                  
-   258                                          primitive '>number',to_number
+   253 00000142 43                              inc bx
+   254 00000143 53                              push bx
+   255 00000144 8A5FFF                          mov bl,byte[bx-1]
+   256 00000147 B700                            mov bh,0
+   257 00000149 EBA4                            jmp next
+   258                                  
+   259                                          primitive '>number',to_number
     24                              <1> header %1,%2,%3,$+2
     16 0000014B [3801]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 0000014D 073E6E756D626572    <2> db %3 + %%count,%1
     20 00000155 [5701]              <2> cfa_ %+ %2 dw %4
-   259 00000157 5F                              pop di
-   260 00000158 59                              pop cx
-   261 00000159 58                              pop ax
-   262 0000015A 85DB                    to_numl test bx,bx
-   263 0000015C 7433                            je to_numz
-   264 0000015E 50                              push ax
-   265 0000015F 8A05                            mov al,byte[di]
-   266 00000161 3C61                            cmp al,'a'
-   267 00000163 7202                            jc to_nums
-   268 00000165 2C20                            sub al,32
-   269 00000167 3C3A                    to_nums cmp al,'9'+1
-   270 00000169 7206                            jc to_numg
-   271 0000016B 3C41                            cmp al,'A'
-   272 0000016D 7223                            jc to_numh
-   273 0000016F 2C07                            sub al,7
-   274 00000171 2C30                    to_numg sub al,48
-   275 00000173 B400                            mov ah,0
-   276 00000175 3A06[3500]                      cmp al,byte[dfa_base]
-   277 00000179 7317                            jnc to_numh
-   278 0000017B 92                              xchg ax,dx
-   279 0000017C 58                              pop ax
-   280 0000017D 52                              push dx
-   281 0000017E 91                              xchg ax,cx
-   282 0000017F F726[3500]                      mul word[dfa_base]
-   283 00000183 91                              xchg ax,cx
-   284 00000184 F726[3500]                      mul word[dfa_base]
-   285 00000188 01D1                            add cx,dx
-   286 0000018A 5A                              pop dx
-   287 0000018B 01D0                            add ax,dx
-   288 0000018D 4B                              dec bx
-   289 0000018E 47                              inc di
-   290 0000018F EBC9                            jmp to_numl
-   291 00000191 50                      to_numz push ax
-   292 00000192 51                      to_numh push cx
-   293 00000193 57                              push di
-   294 00000194 E958FF                          jmp next
-   295                                  
-   296                                  ; -----------------------
-   297                                  ; Terminal I/O Primitives - Forth I/O Words
-   298                                  ; -----------------------
-   299                                  
-   300                                          primitive 'accept',accept
+   260 00000157 5F                              pop di
+   261 00000158 59                              pop cx
+   262 00000159 58                              pop ax
+   263 0000015A 85DB                    to_numl test bx,bx
+   264 0000015C 7433                            je to_numz
+   265 0000015E 50                              push ax
+   266 0000015F 8A05                            mov al,byte[di]
+   267 00000161 3C61                            cmp al,'a'
+   268 00000163 7202                            jc to_nums
+   269 00000165 2C20                            sub al,32
+   270 00000167 3C3A                    to_nums cmp al,'9'+1
+   271 00000169 7206                            jc to_numg
+   272 0000016B 3C41                            cmp al,'A'
+   273 0000016D 7223                            jc to_numh
+   274 0000016F 2C07                            sub al,7
+   275 00000171 2C30                    to_numg sub al,48
+   276 00000173 B400                            mov ah,0
+   277 00000175 3A06[3500]                      cmp al,byte[dfa_base]
+   278 00000179 7317                            jnc to_numh
+   279 0000017B 92                              xchg ax,dx
+   280 0000017C 58                              pop ax
+   281 0000017D 52                              push dx
+   282 0000017E 91                              xchg ax,cx
+   283 0000017F F726[3500]                      mul word[dfa_base]
+   284 00000183 91                              xchg ax,cx
+   285 00000184 F726[3500]                      mul word[dfa_base]
+   286 00000188 01D1                            add cx,dx
+   287 0000018A 5A                              pop dx
+   288 0000018B 01D0                            add ax,dx
+   289 0000018D 4B                              dec bx
+   290 0000018E 47                              inc di
+   291 0000018F EBC9                            jmp to_numl
+   292 00000191 50                      to_numz push ax
+   293 00000192 51                      to_numh push cx
+   294 00000193 57                              push di
+   295 00000194 E958FF                          jmp next
+   296                                  
+   297                                  ; -----------------------
+   298                                  ; Terminal I/O Primitives - Forth I/O Words
+   299                                  ; -----------------------
+   300                                  
+   301                                          primitive 'accept',accept
     24                              <1> header %1,%2,%3,$+2
     16 00000197 [4B01]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 00000199 06616363657074      <2> db %3 + %%count,%1
     20 000001A0 [A201]              <2> cfa_ %+ %2 dw %4
-   301 000001A2 5F                              pop di
-   302 000001A3 31C9                            xor cx,cx
-   303 000001A5 E89E00                  acceptl call getchar
-   304 000001A8 3C08                            cmp al,8
-   305 000001AA 7513                            jne acceptn
-   306 000001AC E319                            jcxz acceptb
-   307 000001AE E89C00                          call outchar
-   308 000001B1 B020                            mov al,' '
-   309 000001B3 E89700                          call outchar
-   310 000001B6 B008                            mov al,8
-   311 000001B8 E89200                          call outchar
-   312 000001BB 49                              dec cx
-   313 000001BC 4F                              dec di
-   314 000001BD EBE6                            jmp acceptl
-   315 000001BF 3C0D                    acceptn cmp al,13
-   316 000001C1 7412                            je acceptz
-   317 000001C3 39D9                            cmp cx,bx
-   318 000001C5 7507                            jne accepts
-   319 000001C7 B007                    acceptb mov al,7
-   320 000001C9 E88100                          call outchar
-   321 000001CC EBD7                            jmp acceptl
-   322 000001CE AA                      accepts stosb
-   323 000001CF 41                              inc cx
-   324 000001D0 E87A00                          call outchar
-   325 000001D3 EBD0                            jmp acceptl
-   326 000001D5 E3F0                    acceptz jcxz acceptb
-   327 000001D7 B00D                            mov al,13
-   328 000001D9 E87100                          call outchar
-   329 000001DC B00A                            mov al,10
-   330 000001DE E86C00                          call outchar
-   331 000001E1 89CB                            mov bx,cx
-   332 000001E3 E909FF                          jmp next
-   333                                  
-   334                                          primitive 'word',word
+   302 000001A2 5F                              pop di
+   303 000001A3 31C9                            xor cx,cx
+   304 000001A5 E89E00                  acceptl call getchar
+   305 000001A8 3C08                            cmp al,8
+   306 000001AA 7513                            jne acceptn
+   307 000001AC E319                            jcxz acceptb
+   308 000001AE E89C00                          call outchar
+   309 000001B1 B020                            mov al,' '
+   310 000001B3 E89700                          call outchar
+   311 000001B6 B008                            mov al,8
+   312 000001B8 E89200                          call outchar
+   313 000001BB 49                              dec cx
+   314 000001BC 4F                              dec di
+   315 000001BD EBE6                            jmp acceptl
+   316 000001BF 3C0D                    acceptn cmp al,13
+   317 000001C1 7412                            je acceptz
+   318 000001C3 39D9                            cmp cx,bx
+   319 000001C5 7507                            jne accepts
+   320 000001C7 B007                    acceptb mov al,7
+   321 000001C9 E88100                          call outchar
+   322 000001CC EBD7                            jmp acceptl
+   323 000001CE AA                      accepts stosb
+   324 000001CF 41                              inc cx
+   325 000001D0 E87A00                          call outchar
+   326 000001D3 EBD0                            jmp acceptl
+   327 000001D5 E3F0                    acceptz jcxz acceptb
+   328 000001D7 B00D                            mov al,13
+   329 000001D9 E87100                          call outchar
+   330 000001DC B00A                            mov al,10
+   331 000001DE E86C00                          call outchar
+   332 000001E1 89CB                            mov bx,cx
+   333 000001E3 E909FF                          jmp next
+   334                                  
+   335                                          primitive 'word',word
     24                              <1> header %1,%2,%3,$+2
     16 000001E6 [9701]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 000001E8 04776F7264          <2> db %3 + %%count,%1
     20 000001ED [EF01]              <2> cfa_ %+ %2 dw %4
-   335 000001EF 8B3E[2A00]                      mov di,word[dfa_dp]
-   336 000001F3 57                              push di
-   337 000001F4 89DA                            mov dx,bx
-   338 000001F6 8B1E[4A00]                      mov bx,word[dfa_tib]
-   339 000001FA 89D9                            mov cx,bx
-   340 000001FC 031E[1600]                      add bx,word[dfa_to_in]
-   341 00000200 030E[2100]                      add cx,word[dfa_ntib]
-   342 00000204 39D9                    wordf   cmp cx,bx
-   343 00000206 7415                            je wordz
-   344 00000208 8A07                            mov al,byte[bx]
-   345 0000020A 43                              inc bx
-   346 0000020B 38D0                            cmp al,dl
-   347 0000020D 74F5                            je wordf
-   348 0000020F 47                      wordc   inc di
-   349 00000210 8805                            mov byte[di],al
-   350 00000212 39D9                            cmp cx,bx
-   351 00000214 7407                            je wordz
-   352 00000216 8A07                            mov al,byte[bx]
-   353 00000218 43                              inc bx
-   354 00000219 38D0                            cmp al,dl
-   355 0000021B 75F2                            jne wordc
-   356 0000021D C6450120                wordz   mov byte[di+1],32
-   357 00000221 A1[2A00]                        mov ax,word[dfa_dp]
-   358 00000224 97                              xchg ax,di
-   359 00000225 29F8                            sub ax,di
-   360 00000227 8805                            mov byte[di],al
-   361 00000229 2B1E[4A00]                      sub bx,word[dfa_tib]
-   362 0000022D 891E[1600]                      mov word[dfa_to_in],bx
-   363 00000231 5B                              pop bx
-   364 00000232 E9BAFE                          jmp next
-   365                                  
-   366                                          primitive 'emit',emit
+   336 000001EF 8B3E[2A00]                      mov di,word[dfa_dp]
+   337 000001F3 57                              push di
+   338 000001F4 89DA                            mov dx,bx
+   339 000001F6 8B1E[4A00]                      mov bx,word[dfa_tib]
+   340 000001FA 89D9                            mov cx,bx
+   341 000001FC 031E[1600]                      add bx,word[dfa_to_in]
+   342 00000200 030E[2100]                      add cx,word[dfa_ntib]
+   343 00000204 39D9                    wordf   cmp cx,bx
+   344 00000206 7415                            je wordz
+   345 00000208 8A07                            mov al,byte[bx]
+   346 0000020A 43                              inc bx
+   347 0000020B 38D0                            cmp al,dl
+   348 0000020D 74F5                            je wordf
+   349 0000020F 47                      wordc   inc di
+   350 00000210 8805                            mov byte[di],al
+   351 00000212 39D9                            cmp cx,bx
+   352 00000214 7407                            je wordz
+   353 00000216 8A07                            mov al,byte[bx]
+   354 00000218 43                              inc bx
+   355 00000219 38D0                            cmp al,dl
+   356 0000021B 75F2                            jne wordc
+   357 0000021D C6450120                wordz   mov byte[di+1],32
+   358 00000221 A1[2A00]                        mov ax,word[dfa_dp]
+   359 00000224 97                              xchg ax,di
+   360 00000225 29F8                            sub ax,di
+   361 00000227 8805                            mov byte[di],al
+   362 00000229 2B1E[4A00]                      sub bx,word[dfa_tib]
+   363 0000022D 891E[1600]                      mov word[dfa_to_in],bx
+   364 00000231 5B                              pop bx
+   365 00000232 E9BAFE                          jmp next
+   366                                  
+   367                                          primitive 'emit',emit
     24                              <1> header %1,%2,%3,$+2
     16 00000235 [E601]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 00000237 04656D6974          <2> db %3 + %%count,%1
     20 0000023C [3E02]              <2> cfa_ %+ %2 dw %4
-   367 0000023E 93                              xchg ax,bx
-   368 0000023F E80B00                          call outchar
-   369 00000242 5B                              pop bx
-   370 00000243 E9A9FE                          jmp next
-   371                                  
-   372 00000246 B407                    getchar mov ah,7
-   373 00000248 CD21                            int 021h
-   374 0000024A B400                            mov ah,0
-   375 0000024C C3                              ret
-   376                                  
-   377 0000024D 92                      outchar xchg ax,dx
-   378 0000024E B402                            mov ah,2
-   379 00000250 CD21                            int 021h
-   380 00000252 C3                              ret
-   381                                  
-   382                                  ; -----------------------
-   383                                  ; Search Primitive - Forth Dictionary Lookup Word
-   384                                  ; -----------------------
-   385                                  
-   386                                          primitive 'find',find
+   368 0000023E 93                              xchg ax,bx
+   369 0000023F E80B00                          call outchar
+   370 00000242 5B                              pop bx
+   371 00000243 E9A9FE                          jmp next
+   372                                  
+   373 00000246 B407                    getchar mov ah,7
+   374 00000248 CD21                            int 021h
+   375 0000024A B400                            mov ah,0
+   376 0000024C C3                              ret
+   377                                  
+   378 0000024D 92                      outchar xchg ax,dx
+   379 0000024E B402                            mov ah,2
+   380 00000250 CD21                            int 021h
+   381 00000252 C3                              ret
+   382                                  
+   383                                  ; -----------------------
+   384                                  ; Search Primitive - Forth Dictionary Lookup Word
+   385                                  ; -----------------------
+   386                                  
+   387                                          primitive 'find',find
     24                              <1> header %1,%2,%3,$+2
     16 00000253 [3502]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 00000255 0466696E64          <2> db %3 + %%count,%1
     20 0000025A [5C02]              <2> cfa_ %+ %2 dw %4
-   387 0000025C BF[4000]                        mov di,dfa_last
-   388 0000025F 57                      findl   push di
-   389 00000260 53                              push bx
-   390 00000261 8A0F                            mov cl,byte[bx]
-   391 00000263 B500                            mov ch,0
-   392 00000265 41                              inc cx
-   393 00000266 8A4502                  findc   mov al,byte[di+2]
-   394 00000269 247F                            and al,07Fh
-   395 0000026B 3A07                            cmp al,byte[bx]
-   396 0000026D 740E                            je findm
-   397 0000026F 5B                              pop bx
-   398 00000270 5F                              pop di
-   399 00000271 8B3D                            mov di,word[di]
-   400 00000273 85FF                            test di,di
-   401 00000275 75E8                            jne findl
-   402 00000277 53                      findnf  push bx
-   403 00000278 31DB                            xor bx,bx
-   404 0000027A E972FE                          jmp next
-   405 0000027D 47                      findm   inc di
-   406 0000027E 43                              inc bx
-   407 0000027F E2E5                            loop findc
-   408 00000281 5B                              pop bx
-   409 00000282 5F                              pop di
-   410 00000283 BB0100                          mov bx,1
-   411 00000286 47                              inc di
-   412 00000287 47                              inc di
-   413 00000288 8A05                            mov al,byte[di]
-   414 0000028A A880                            test al,080h
-   415 0000028C 7502                            jne findi
-   416 0000028E F7DB                            neg bx
-   417 00000290 83E01F                  findi   and ax,31
-   418 00000293 01C7                            add di,ax
-   419 00000295 47                              inc di
-   420 00000296 57                              push di
-   421 00000297 E955FE                          jmp next
-   422                                  
-   423                                  ; -----------------------
-   424                                  ; Colon Definitions - Forth Colon Start and End Words
-   425                                  ; -----------------------
-   426                                  
-   427                                          colon ':',colon
+   388 0000025C BF[4000]                        mov di,dfa_last
+   389 0000025F 57                      findl   push di
+   390 00000260 53                              push bx
+   391 00000261 8A0F                            mov cl,byte[bx]
+   392 00000263 B500                            mov ch,0
+   393 00000265 41                              inc cx
+   394 00000266 8A4502                  findc   mov al,byte[di+2]
+   395 00000269 247F                            and al,07Fh
+   396 0000026B 3A07                            cmp al,byte[bx]
+   397 0000026D 740E                            je findm
+   398 0000026F 5B                              pop bx
+   399 00000270 5F                              pop di
+   400 00000271 8B3D                            mov di,word[di]
+   401 00000273 85FF                            test di,di
+   402 00000275 75E8                            jne findl
+   403 00000277 53                      findnf  push bx
+   404 00000278 31DB                            xor bx,bx
+   405 0000027A E972FE                          jmp next
+   406 0000027D 47                      findm   inc di
+   407 0000027E 43                              inc bx
+   408 0000027F E2E5                            loop findc
+   409 00000281 5B                              pop bx
+   410 00000282 5F                              pop di
+   411 00000283 BB0100                          mov bx,1
+   412 00000286 47                              inc di
+   413 00000287 47                              inc di
+   414 00000288 8A05                            mov al,byte[di]
+   415 0000028A A880                            test al,080h
+   416 0000028C 7502                            jne findi
+   417 0000028E F7DB                            neg bx
+   418 00000290 83E01F                  findi   and ax,31
+   419 00000293 01C7                            add di,ax
+   420 00000295 47                              inc di
+   421 00000296 57                              push di
+   422 00000297 E955FE                          jmp next
+   423                                  
+   424                                  ; -----------------------
+   425                                  ; Colon Definitions - Forth Colon Start and End Words
+   426                                  ; -----------------------
+   427                                  
+   428                                          colon ':',colon
     28                              <1> header %1,%2,%3,docolon
     16 0000029A [5302]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 0000029C 013A                <2> db %3 + %%count,%1
     20 0000029E [AC02]              <2> cfa_ %+ %2 dw %4
-   428 000002A0 [8400]FFFF[0A00]-               dw cfa_lit,-1,cfa_state,cfa_store,cfa_create
-   428 000002A6 [E800][D602]       
-   429 000002AA [0D03]                          dw cfa_do_semi_code
-   430 000002AC 4D                      docolon dec bp
-   431 000002AD 4D                              dec bp
-   432 000002AE 897600                          mov word[bp],si
-   433 000002B1 8D7502                          lea si,[di+2]
-   434 000002B4 E938FE                          jmp next
-   435                                  
-   436                                          colon ';',semicolon,immediate
+   429 000002A0 [8400]FFFF[0A00]-               dw cfa_lit,-1,cfa_state,cfa_store,cfa_create
+   429 000002A6 [E800][D602]       
+   430 000002AA [0D03]                          dw cfa_do_semi_code
+   431 000002AC 4D                      docolon dec bp
+   432 000002AD 4D                              dec bp
+   433 000002AE 897600                          mov word[bp],si
+   434 000002B1 8D7502                          lea si,[di+2]
+   435 000002B4 E938FE                          jmp next
+   436                                  
+   437                                          colon ';',semicolon,immediate
     28                              <1> header %1,%2,%3,docolon
     16 000002B7 [9A02]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 000002B9 813B                <2> db %3 + %%count,%1
     20 000002BB [AC02]              <2> cfa_ %+ %2 dw %4
-   437 000002BD [8400][2F01][6F00]-             dw cfa_lit,cfa_exit,cfa_comma,cfa_lit,0,cfa_state
-   437 000002C3 [8400]0000[0A00]   
-   438 000002C9 [E800][2F01]                    dw cfa_store,cfa_exit
-   439                                  
-   440                                  ; -----------------------
-   441                                  ; Create and Code Definitions - Forth Low-Level Colon Words
-   442                                  ; -----------------------
-   443                                  
-   444                                          colon 'create',create
+   438 000002BD [8400][2F01][6F00]-             dw cfa_lit,cfa_exit,cfa_comma,cfa_lit,0,cfa_state
+   438 000002C3 [8400]0000[0A00]   
+   439 000002C9 [E800][2F01]                    dw cfa_store,cfa_exit
+   440                                  
+   441                                  ; -----------------------
+   442                                  ; Create and Code Definitions - Forth Low-Level Colon Words
+   443                                  ; -----------------------
+   444                                  
+   445                                          colon 'create',create
     28                              <1> header %1,%2,%3,docolon
     16 000002CD [B702]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 000002CF 06637265617465      <2> db %3 + %%count,%1
     20 000002D6 [AC02]              <2> cfa_ %+ %2 dw %4
-   445 000002D8 [2800][DE00][3E00]-             dw cfa_dp,cfa_fetch,cfa_last,cfa_fetch,cfa_comma
-   445 000002DE [DE00][6F00]       
-   446 000002E2 [3E00][E800][8400]-             dw cfa_last,cfa_store,cfa_lit,32,cfa_word,cfa_count
-   446 000002E8 2000[ED01][4001]   
-   447 000002EE [C300][2800][E800]-             dw cfa_plus,cfa_dp,cfa_store,cfa_lit,0,cfa_comma
-   447 000002F4 [8400]0000[6F00]   
-   448 000002FA [0D03]                          dw cfa_do_semi_code
-   449 000002FC 53                      dovar   push bx
-   450 000002FD 8D5D02                          lea bx,[di+2]
-   451 00000300 E9ECFD                          jmp next
-   452                                  
-   453                                          primitive '(;code)',do_semi_code
+   446 000002D8 [2800][DE00][3E00]-             dw cfa_dp,cfa_fetch,cfa_last,cfa_fetch,cfa_comma
+   446 000002DE [DE00][6F00]       
+   447 000002E2 [3E00][E800][8400]-             dw cfa_last,cfa_store,cfa_lit,32,cfa_word,cfa_count
+   447 000002E8 2000[ED01][4001]   
+   448 000002EE [C300][2800][E800]-             dw cfa_plus,cfa_dp,cfa_store,cfa_lit,0,cfa_comma
+   448 000002F4 [8400]0000[6F00]   
+   449 000002FA [0D03]                          dw cfa_do_semi_code
+   450 000002FC 53                      dovar   push bx
+   451 000002FD 8D5D02                          lea bx,[di+2]
+   452 00000300 E9ECFD                          jmp next
+   453                                  
+   454                                          primitive '(;code)',do_semi_code
     24                              <1> header %1,%2,%3,$+2
     16 00000303 [CD02]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 00000305 07283B636F646529    <2> db %3 + %%count,%1
     20 0000030D [0F03]              <2> cfa_ %+ %2 dw %4
-   454 0000030F 8B3E[4000]                      mov di,word[dfa_last]
-   455 00000313 8A4502                          mov al,byte[di+2]
-   456 00000316 83E01F                          and ax,31
-   457 00000319 01C7                            add di,ax
-   458 0000031B 897503                          mov word[di+3],si
-   459 0000031E 8B7600                          mov si,word[bp]
-   460 00000321 45                              inc bp
-   461 00000322 45                              inc bp
-   462 00000323 E9C9FD                          jmp next
-   463                                  
-   464                                  ; -----------------------
-   465                                  ; Constant Definition - Forth Constant Word
-   466                                  ; -----------------------
-   467                                  
-   468                                          colon 'constant',constant
+   455 0000030F 8B3E[4000]                      mov di,word[dfa_last]
+   456 00000313 8A4502                          mov al,byte[di+2]
+   457 00000316 83E01F                          and ax,31
+   458 00000319 01C7                            add di,ax
+   459 0000031B 897503                          mov word[di+3],si
+   460 0000031E 8B7600                          mov si,word[bp]
+   461 00000321 45                              inc bp
+   462 00000322 45                              inc bp
+   463 00000323 E9C9FD                          jmp next
+   464                                  
+   465                                  ; -----------------------
+   466                                  ; Constant Definition - Forth Constant Word
+   467                                  ; -----------------------
+   468                                  
+   469                                          colon 'constant',constant
     28                              <1> header %1,%2,%3,docolon
     16 00000326 [0303]              <2> %%head dw head
     17                              <2> %define head %%head
     18                              <2> %strlen %%count %1
     19 00000328 08636F6E7374616E74  <2> db %3 + %%count,%1
     20 00000331 [AC02]              <2> cfa_ %+ %2 dw %4
-   469 00000333 [D602][6F00][0D03]              dw cfa_create,cfa_comma,cfa_do_semi_code
-   470 00000339 53                      doconst push bx
-   471 0000033A 8B5D02                          mov bx,word[di+2]
-   472 0000033D E9AFFD                          jmp next
-   473                                  
-   474                                  ; -----------------------
-   475                                  ; Outer Interpreter – Forth REPL (Process input, execute words, handle control flow)
-   476                                  ; -----------------------
-   477                                  
-   478                                  final:
-   479                                          colon 'interpret',interpret
+   470 00000333 [D602][6F00][0D03]              dw cfa_create,cfa_comma,cfa_do_semi_code
+   471 00000339 53                      doconst push bx
+   472 0000033A 8B5D02                          mov bx,word[di+2]
+   473 0000033D E9AFFD                          jmp next
+   474                                  
+   475                                  ; -----------------------
+   476                                  ; Outer Interpreter – Forth REPL (Process input, execute words, handle control flow)
+   477                                  ; -----------------------
+   478                                  
+   479                                  final:
+   480                                          colon 'interpret',interpret
     28                              <1> header %1,%2,%3,docolon
     16 00000340 [2603]              <2> %%head dw head
     17                              <2> %define head %%head
@@ -627,37 +628,37 @@
     19 00000342 09696E746572707265- <2> db %3 + %%count,%1
     19 0000034B 74                  <2>
     20 0000034C [AC02]              <2> cfa_ %+ %2 dw %4
-   480 0000034E [1F00][DE00][1400]-     interpt dw cfa_ntib,cfa_fetch,cfa_to_in,cfa_fetch
-   480 00000354 [DE00]             
-   481 00000356 [CE00][FD00][7003]-             dw cfa_equals,cfa_zero_branch,intpar,cfa_tib
-   481 0000035C [4800]             
-   482 0000035E [8400]3200[A001]-               dw cfa_lit,50,cfa_accept,cfa_ntib,cfa_store
-   482 00000364 [1F00][E800]       
-   483 00000368 [8400]0000[1400]-               dw cfa_lit,0,cfa_to_in,cfa_store
-   483 0000036E [E800]             
-   484 00000370 [8400]2000[ED01]-       intpar  dw cfa_lit,32,cfa_word,cfa_find,cfa_dupe
-   484 00000376 [5A02][AC00]       
-   485 0000037A [FD00][9403][0A00]-             dw cfa_zero_branch,intnf,cfa_state,cfa_fetch
-   485 00000380 [DE00]             
-   486 00000382 [CE00][FD00][8E03]-             dw cfa_equals,cfa_zero_branch,intexc,cfa_comma
-   486 00000388 [6F00]             
-   487 0000038A [1101][CE03]                    dw cfa_branch,intdone
-   488 0000038E [2101][1101][CE03]      intexc  dw cfa_execute,cfa_branch,intdone
-   489 00000394 [AC00][9100][4001]-     intnf   dw cfa_dupe,cfa_rote,cfa_count,cfa_to_number
-   489 0000039A [5501]             
-   490 0000039C [FD00][BA03][0A00]-             dw cfa_zero_branch,intskip,cfa_state,cfa_fetch
-   490 000003A2 [DE00]             
-   491 000003A4 [FD00][B803][3E00]-             dw cfa_zero_branch,intnc,cfa_last,cfa_fetch,cfa_dupe
-   491 000003AA [DE00][AC00]       
-   492 000003AE [DE00][3E00][E800]-             dw cfa_fetch,cfa_last,cfa_store,cfa_dp,cfa_store
-   492 000003B4 [2800][E800]       
-   493 000003B8 [5400]                  intnc   dw cfa_abort
-   494 000003BA [A100][A100][0A00]-     intskip dw cfa_drop, cfa_drop, cfa_state, cfa_fetch
-   494 000003C0 [DE00]             
-   495 000003C2 [FD00][CE03][8400]-             dw cfa_zero_branch,intdone,cfa_lit,cfa_lit,cfa_comma
-   495 000003C8 [8400][6F00]       
-   496 000003CC [6F00]                          dw cfa_comma
-   497 000003CE [1101][4E03]            intdone dw cfa_branch,interpt
-   498                                  
-   499                                  freemem:
-   500                                  
+   481 0000034E [1F00][DE00][1400]-     interpt dw cfa_ntib,cfa_fetch,cfa_to_in,cfa_fetch
+   481 00000354 [DE00]             
+   482 00000356 [CE00][FD00][7003]-             dw cfa_equals,cfa_zero_branch,intpar,cfa_tib
+   482 0000035C [4800]             
+   483 0000035E [8400]3200[A001]-               dw cfa_lit,50,cfa_accept,cfa_ntib,cfa_store
+   483 00000364 [1F00][E800]       
+   484 00000368 [8400]0000[1400]-               dw cfa_lit,0,cfa_to_in,cfa_store
+   484 0000036E [E800]             
+   485 00000370 [8400]2000[ED01]-       intpar  dw cfa_lit,32,cfa_word,cfa_find,cfa_dupe
+   485 00000376 [5A02][AC00]       
+   486 0000037A [FD00][9403][0A00]-             dw cfa_zero_branch,intnf,cfa_state,cfa_fetch
+   486 00000380 [DE00]             
+   487 00000382 [CE00][FD00][8E03]-             dw cfa_equals,cfa_zero_branch,intexc,cfa_comma
+   487 00000388 [6F00]             
+   488 0000038A [1101][CE03]                    dw cfa_branch,intdone
+   489 0000038E [2101][1101][CE03]      intexc  dw cfa_execute,cfa_branch,intdone
+   490 00000394 [AC00][9100][4001]-     intnf   dw cfa_dupe,cfa_rot,cfa_count,cfa_to_number
+   490 0000039A [5501]             
+   491 0000039C [FD00][BA03][0A00]-             dw cfa_zero_branch,intskip,cfa_state,cfa_fetch
+   491 000003A2 [DE00]             
+   492 000003A4 [FD00][B803][3E00]-             dw cfa_zero_branch,intnc,cfa_last,cfa_fetch,cfa_dupe
+   492 000003AA [DE00][AC00]       
+   493 000003AE [DE00][3E00][E800]-             dw cfa_fetch,cfa_last,cfa_store,cfa_dp,cfa_store
+   493 000003B4 [2800][E800]       
+   494 000003B8 [5400]                  intnc   dw cfa_abort
+   495 000003BA [A100][A100][0A00]-     intskip dw cfa_drop, cfa_drop, cfa_state, cfa_fetch
+   495 000003C0 [DE00]             
+   496 000003C2 [FD00][CE03][8400]-             dw cfa_zero_branch,intdone,cfa_lit,cfa_lit,cfa_comma
+   496 000003C8 [8400][6F00]       
+   497 000003CC [6F00]                          dw cfa_comma
+   498 000003CE [1101][4E03]            intdone dw cfa_branch,interpt
+   499                                  
+   500                                  freemem:
+   501                                  
