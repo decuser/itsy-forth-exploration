@@ -4,6 +4,9 @@
 *.bin
 *.o
 itsy
+*.od
+*.dis
+*.clean
 
 # Backup / temporary files
 *~

@@ -107,7 +107,7 @@ dfa_tib:            dw 32768
 ; -------------------
 
 ; forth word - abort (primitive)
-lfa_abort:          dw lfa_tib     ; prev-link
+lfa_abort:          dw lfa_tib      ; prev-link
 nfa_abort:          db 5,'abort'    ; name len+string
 cfa_abort:          dw $+2          ; xt
 
@@ -124,7 +124,7 @@ cfa_abort:          dw $+2          ; xt
 ; -------------------
 
 ; forth word - comma (primitive)
-lfa_comma:          dw lfa_abort     ; prev-link
+lfa_comma:          dw lfa_abort    ; prev-link
 nfa_comma:          db 1,','        ; name len+string
 cfa_comma:          dw $+2          ; xt
 
@@ -136,8 +136,8 @@ cfa_comma:          dw $+2          ; xt
                     jmp next
 
 ; forth word - lit (primitive)
-lfa_lit:            dw lfa_comma     ; prev-link
-nfa_lit:            db 3,'lit'    ; name len+string
+lfa_lit:            dw lfa_comma    ; prev-link
+nfa_lit:            db 3,'lit'      ; name len+string
 cfa_lit:            dw $+2          ; xt
 
                     push bx
@@ -145,35 +145,51 @@ cfa_lit:            dw $+2          ; xt
                     xchg ax,bx
                     jmp next
 
-; LEFT OFF HERE!
-; set defined head to last primitive expanded during dev
-%define head lfa_lit
-
 ; -------------------
 ; Stack Primitives - Forth Stack Manipulation Words
 ; -------------------
 
-        primitive 'rot',rot
-        pop dx
-        pop ax
-        push dx
-        push bx
-        xchg ax,bx
-        jmp next
+; forth word - rot (primitive)
+lfa_rot:            dw lfa_lit      ; prev-link
+nfa_rot:            db 3,'rot'      ; name len+string
+cfa_rot:            dw $+2          ; xt
 
-        primitive 'drop',drop
-        pop bx
-        jmp next
+                    pop dx
+                    pop ax
+                    push dx
+                    push bx
+                    xchg ax,bx
+                    jmp next
 
-        primitive 'dup',dupe
-        push bx
-        jmp next
+; forth word - drop (primitive)
+lfa_drop:           dw lfa_rot      ; prev-link
+nfa_drop:           db 4,'drop'     ; name len+string
+cfa_drop:           dw $+2          ; xt
 
-        primitive 'swap',swap
-        pop ax
-        push bx
-        xchg ax,bx
-        jmp next
+                    pop bx
+                    jmp next
+
+; forth word - dupe (primitive)
+lfa_dup:            dw lfa_drop     ; prev-link
+nfa_dup:            db 3,'dup'      ; name len+string
+cfa_dup:            dw $+2          ; xt
+
+                    push bx
+                    jmp next
+
+; forth word - swap (primitive)
+lfa_swap:           dw lfa_dup      ; prev-link
+nfa_swap:           db 4,'swap'     ; name len+string
+cfa_swap:           dw $+2          ; xt
+
+                    pop ax
+                    push bx
+                    xchg ax,bx
+                    jmp next
+
+; LEFT OFF HERE!
+; set defined head to last primitive expanded during dev
+%define head lfa_swap
 
 ; -------------------
 ; Math and Logic Primitives - Forth Arithmetic and Logical Words
@@ -482,14 +498,14 @@ interpt dw cfa_ntib,cfa_fetch,cfa_to_in,cfa_fetch
         dw cfa_equals,cfa_zero_branch,intpar,cfa_tib
         dw cfa_lit,50,cfa_accept,cfa_ntib,cfa_store
         dw cfa_lit,0,cfa_to_in,cfa_store
-intpar  dw cfa_lit,32,cfa_word,cfa_find,cfa_dupe
+intpar  dw cfa_lit,32,cfa_word,cfa_find,cfa_dup
         dw cfa_zero_branch,intnf,cfa_state,cfa_fetch
         dw cfa_equals,cfa_zero_branch,intexc,cfa_comma
         dw cfa_branch,intdone
 intexc  dw cfa_execute,cfa_branch,intdone
-intnf   dw cfa_dupe,cfa_rot,cfa_count,cfa_to_number
+intnf   dw cfa_dup,cfa_rot,cfa_count,cfa_to_number
         dw cfa_zero_branch,intskip,cfa_state,cfa_fetch
-        dw cfa_zero_branch,intnc,cfa_last,cfa_fetch,cfa_dupe
+        dw cfa_zero_branch,intnc,cfa_last,cfa_fetch,cfa_dup
         dw cfa_fetch,cfa_last,cfa_store,cfa_dp,cfa_store
 intnc   dw cfa_abort
 intskip dw cfa_drop, cfa_drop, cfa_state, cfa_fetch
