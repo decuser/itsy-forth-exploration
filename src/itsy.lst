@@ -1,656 +1,1417 @@
-     1                                  %include "macros.asm"
-     1                              <1>         %define link 0
-     2                              <1>         %define immediate 080h
-     3                              <1> 
-     4                              <1>         %macro head 4
-     5                              <1>         %%link dw link
-     6                              <1>         %define link %%link
-     7                              <1>         %strlen %%count %1
-     8                              <1>         db %3 + %%count,%1
-     9                              <1>         xt_ %+ %2 dw %4
-    10                              <1>         %endmacro
-    11                              <1> 
-    12                              <1>         %macro primitive 2-3 0
-    13                              <1>         head %1,%2,%3,$+2
-    14                              <1>         %endmacro
-    15                              <1> 
-    16                              <1>         %macro colon 2-3 0
-    17                              <1>         head %1,%2,%3,docolon
-    18                              <1>         %endmacro
-    19                              <1> 
-    20                              <1>         %macro constant 3
-    21                              <1>         head %1,%2,0,doconst
-    22                              <1>         val_ %+ %2 dw %3
-    23                              <1>         %endmacro
-    24                              <1> 
-    25                              <1>         %macro variable 3
-    26                              <1>         head %1,%2,0,dovar
-    27                              <1>         val_ %+ %2 dw %3
-    28                              <1>         %endmacro
-     2                                  
-     3                                          org 0100h
-     4 00000000 EB54                            jmp xt_abort+2
-     5                                  
-     6                                  ; -------------------
-     7                                  ; Variables
-     8                                  ; -------------------
-     9                                  
-    10                                          variable 'state',state,0
-    26                              <1>  head %1,%2,0,dovar
-     5 00000002 0000                <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000004 057374617465        <2>  db %3 + %%count,%1
-     9 0000000A [FC02]              <2>  xt_ %+ %2 dw %4
-    27 0000000C 0000                <1>  val_ %+ %2 dw %3
-    11                                  
-    12                                          variable '>in',to_in,0
-    26                              <1>  head %1,%2,0,dovar
-     5 0000000E [0200]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000010 033E696E            <2>  db %3 + %%count,%1
-     9 00000014 [FC02]              <2>  xt_ %+ %2 dw %4
-    27 00000016 0000                <1>  val_ %+ %2 dw %3
-    13                                  
-    14                                          variable '#tib',number_t_i_b,0
-    26                              <1>  head %1,%2,0,dovar
-     5 00000018 [0E00]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000001A 0423746962          <2>  db %3 + %%count,%1
-     9 0000001F [FC02]              <2>  xt_ %+ %2 dw %4
-    27 00000021 0000                <1>  val_ %+ %2 dw %3
-    15                                  
-    16                                          variable 'dp',dp,freemem
-    26                              <1>  head %1,%2,0,dovar
-     5 00000023 [1800]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000025 026470              <2>  db %3 + %%count,%1
-     9 00000028 [FC02]              <2>  xt_ %+ %2 dw %4
-    27 0000002A [D203]              <1>  val_ %+ %2 dw %3
-    17                                  
-    18                                          variable 'base',base,10
-    26                              <1>  head %1,%2,0,dovar
-     5 0000002C [2300]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000002E 0462617365          <2>  db %3 + %%count,%1
-     9 00000033 [FC02]              <2>  xt_ %+ %2 dw %4
-    27 00000035 0A00                <1>  val_ %+ %2 dw %3
-    19                                  
-    20                                          variable 'last',last,final
-    26                              <1>  head %1,%2,0,dovar
-     5 00000037 [2C00]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000039 046C617374          <2>  db %3 + %%count,%1
-     9 0000003E [FC02]              <2>  xt_ %+ %2 dw %4
-    27 00000040 [4003]              <1>  val_ %+ %2 dw %3
+     1                                  ; ==========================================================================
+     2                                  ; Itsy 16-bit DOS COM Forth - Introduction / Overview
+     3                                  ; --------------------------------------------------------------------------
+     4                                  ; Itsy is a classical, indirect-threaded Forth interpreter for 16-bit DOS.
+     5                                  ; It implements a single flat memory model where code and data coexist. The
+     6                                  ; system is centered on a dictionary of linked entries, each holding a name,
+     7                                  ; flags, a code field, and optional data. Execution is driven by two loops:
+     8                                  ;   - Outer interpreter: parses input, searches the dictionary, and manages
+     9                                  ;     compilation versus immediate execution.
+    10                                  ;   - Inner interpreter: dispatches words by fetching their code field
+    11                                  ;     addresses and jumping indirectly, forming the core of the threading
+    12                                  ;     model.
+    13                                  ;
+    14                                  ; The interpreter is fully self-extending: new words can be defined at
+    15                                  ; runtime, primitives and assembly routines coexist seamlessly, and the
+    16                                  ; dictionary serves as both program and environment. Register assignments
+    17                                  ; and small helper routines support efficient stack handling, colon
+    18                                  ; definitions, and dictionary access. This overview frames the architecture
+    19                                  ; detailed below.
+    20                                  ; ==========================================================================
     21                                  
-    22                                          constant 'tib',t_i_b,32768
-    21                              <1>  head %1,%2,0,doconst
-     5 00000042 [3700]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000044 03746962            <2>  db %3 + %%count,%1
-     9 00000048 [3903]              <2>  xt_ %+ %2 dw %4
-    22 0000004A 0080                <1>  val_ %+ %2 dw %3
-    23                                  
-    24                                  ; -------------------
-    25                                  ; Initialisation
-    26                                  ; -------------------
-    27                                  
-    28                                          primitive 'abort',abort
-    13                              <1>  head %1,%2,%3,$+2
-     5 0000004C [4200]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000004E 0561626F7274        <2>  db %3 + %%count,%1
-     9 00000054 [5600]              <2>  xt_ %+ %2 dw %4
-    29 00000056 A1[2100]                        mov ax,word[val_number_t_i_b]
-    30 00000059 A3[1600]                        mov word[val_to_in],ax
-    31 0000005C 31ED                            xor bp,bp
-    32 0000005E 892E[0C00]                      mov word[val_state],bp
-    33 00000062 BC00FF                          mov sp,-256
-    34 00000065 BE[4E03]                        mov si,xt_interpret+2
-    35 00000068 E98400                          jmp next
-    36                                  
-    37                                  ; -------------------
-    38                                  ; Compilation
-    39                                  ; -------------------
-    40                                  
-    41                                          primitive ',',comma
-    13                              <1>  head %1,%2,%3,$+2
-     5 0000006B [4C00]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000006D 012C                <2>  db %3 + %%count,%1
-     9 0000006F [7100]              <2>  xt_ %+ %2 dw %4
-    42 00000071 8B3E[2A00]                      mov di,word[val_dp]
-    43 00000075 93                              xchg ax,bx
-    44 00000076 AB                              stosw
-    45 00000077 893E[2A00]                      mov word[val_dp],di
-    46 0000007B 5B                              pop bx
-    47 0000007C EB71                            jmp next
-    48                                  
-    49                                          primitive 'lit',lit
-    13                              <1>  head %1,%2,%3,$+2
-     5 0000007E [6B00]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000080 036C6974            <2>  db %3 + %%count,%1
-     9 00000084 [8600]              <2>  xt_ %+ %2 dw %4
-    50 00000086 53                              push bx
-    51 00000087 AD                              lodsw
-    52 00000088 93                              xchg ax,bx
-    53 00000089 EB64                            jmp next
-    54                                  
-    55                                  ; -------------------
-    56                                  ; Stack
-    57                                  ; -------------------
-    58                                  
-    59                                          primitive 'rot',rote
-    13                              <1>  head %1,%2,%3,$+2
-     5 0000008B [7E00]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000008D 03726F74            <2>  db %3 + %%count,%1
-     9 00000091 [9300]              <2>  xt_ %+ %2 dw %4
-    60 00000093 5A                              pop dx
-    61 00000094 58                              pop ax
-    62 00000095 52                              push dx
-    63 00000096 53                              push bx
-    64 00000097 93                              xchg ax,bx
-    65 00000098 EB55                            jmp next
-    66                                  
-    67                                          primitive 'drop',drop
-    13                              <1>  head %1,%2,%3,$+2
-     5 0000009A [8B00]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000009C 0464726F70          <2>  db %3 + %%count,%1
-     9 000000A1 [A300]              <2>  xt_ %+ %2 dw %4
-    68 000000A3 5B                              pop bx
-    69 000000A4 EB49                            jmp next
-    70                                  
-    71                                          primitive 'dup',dupe
-    13                              <1>  head %1,%2,%3,$+2
-     5 000000A6 [9A00]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 000000A8 03647570            <2>  db %3 + %%count,%1
-     9 000000AC [AE00]              <2>  xt_ %+ %2 dw %4
-    72 000000AE 53                              push bx
-    73 000000AF EB3E                            jmp next
-    74                                  
-    75                                          primitive 'swap',swap
-    13                              <1>  head %1,%2,%3,$+2
-     5 000000B1 [A600]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 000000B3 0473776170          <2>  db %3 + %%count,%1
-     9 000000B8 [BA00]              <2>  xt_ %+ %2 dw %4
-    76 000000BA 58                              pop ax
-    77 000000BB 53                              push bx
-    78 000000BC 93                              xchg ax,bx
-    79 000000BD EB30                            jmp next
-    80                                  
-    81                                  ; -------------------
-    82                                  ; Maths / Logic
-    83                                  ; -------------------
-    84                                  
-    85                                          primitive '+',plus
-    13                              <1>  head %1,%2,%3,$+2
-     5 000000BF [B100]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 000000C1 012B                <2>  db %3 + %%count,%1
-     9 000000C3 [C500]              <2>  xt_ %+ %2 dw %4
-    86 000000C5 58                              pop ax
-    87 000000C6 01C3                            add bx,ax
-    88 000000C8 EB25                            jmp next
-    89                                  
-    90                                          primitive '=',equals
-    13                              <1>  head %1,%2,%3,$+2
-     5 000000CA [BF00]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 000000CC 013D                <2>  db %3 + %%count,%1
-     9 000000CE [D000]              <2>  xt_ %+ %2 dw %4
-    91 000000D0 58                              pop ax
-    92 000000D1 29C3                            sub bx,ax
-    93 000000D3 83EB01                          sub bx,1
-    94 000000D6 19DB                            sbb bx,bx
-    95 000000D8 EB15                            jmp next
-    96                                  
-    97                                  ; -------------------
-    98                                  ; Peek and Poke
-    99                                  ; -------------------
-   100                                  
-   101                                          primitive '@',fetch
-    13                              <1>  head %1,%2,%3,$+2
-     5 000000DA [CA00]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 000000DC 0140                <2>  db %3 + %%count,%1
-     9 000000DE [E000]              <2>  xt_ %+ %2 dw %4
-   102 000000E0 8B1F                            mov bx,word[bx]
-   103 000000E2 EB0B                            jmp next
-   104                                  
-   105                                          primitive '!',store 
-    13                              <1>  head %1,%2,%3,$+2
-     5 000000E4 [DA00]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 000000E6 0121                <2>  db %3 + %%count,%1
-     9 000000E8 [EA00]              <2>  xt_ %+ %2 dw %4
-   106 000000EA 8F07                            pop word[bx]
-   107 000000EC 5B                              pop bx
-   108 000000ED EB00                            jmp next
-   109                                  
-   110                                  ; -------------------
-   111                                  ; Inner Interpreter
-   112                                  ; -------------------
-   113                                  
-   114 000000EF AD                      next    lodsw
-   115 000000F0 97                              xchg di,ax
-   116 000000F1 FF25                            jmp word[di]
-   117                                  
-   118                                  ; -------------------
-   119                                  ; Flow Control
-   120                                  ; -------------------
-   121                                  
-   122                                          primitive '0branch',zero_branch
-    13                              <1>  head %1,%2,%3,$+2
-     5 000000F3 [E400]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 000000F5 07306272616E6368    <2>  db %3 + %%count,%1
-     9 000000FD [FF00]              <2>  xt_ %+ %2 dw %4
-   123 000000FF AD                              lodsw
-   124 00000100 85DB                            test bx,bx
-   125 00000102 7501                            jne zerob_z
-   126 00000104 96                              xchg ax,si
-   127 00000105 5B                      zerob_z pop bx
-   128 00000106 EBE7                            jmp next
+    22                                  ; ==========================================================================
+    23                                  ; Itsy 16-bit DOS COM Forth - Architecture, Dictionary, and Core Routines
+    24                                  ; --------------------------------------------------------------------------
+    25                                  ; -----------------------
+    26                                  ; Dictionary Structure
+    27                                  ; -----------------------
+    28                                  ; The dictionary is a linked list of headers, each containing a name,
+    29                                  ; flags, a code field, and a data field. Threaded code is stored as a
+    30                                  ; sequence of addresses pointing to the code fields of previously defined
+    31                                  ; words. In Itsy, SI is the instruction pointer, fetching each cell that
+    32                                  ; points to a dictionary code field.
+    33                                  
+    34                                  ; -----------------------
+    35                                  ; Dictionary Words
+    36                                  ; -----------------------
+    37                                  ; Each entry in the dictionary represents a Forth word: a variable,
+    38                                  ; constant, primitive, or colon definition. Words are self-describing
+    39                                  ; and contain four main fields:
+    40                                  ;   LFA - pointer to the previous dictionary entry
+    41                                  ;   NFA - pointer to the word’s name string
+    42                                  ;   CFA - pointer to executable code (primitive or colon handler)
+    43                                  ;   DFA - pointer to associated data or value (if applicable)
+    44                                  ;
+    45                                  ; Colon definitions store a sequence of CFA addresses forming threaded
+    46                                  ; code. Primitives, variables, and constants each have short handlers
+    47                                  ; that execute their behavior and then return to the inner interpreter.
+    48                                  ; This structure allows traversal, execution, and runtime modification
+    49                                  ; of the dictionary.
+    50                                  
+    51                                  ; -----------------------
+    52                                  ; Implemented Dictionary Words
+    53                                  ; -----------------------
+    54                                  ;   state   >in       #tib      dp        base     last
+    55                                  ;   tib     abort     ,         lit       rot      drop
+    56                                  ;   dup     swap      +         =         @        !
+    57                                  ;   0branch branch    execute   exit      count    >number
+    58                                  ;   accept  word       emit      find       :        ;
+    59                                  ;   (;code) constant  interpret
+    60                                  
+    61                                  ; -----------------------
+    62                                  ; Inner Interpreter
+    63                                  ; -----------------------
+    64                                  ; Execution passes through a single inner interpreter loop labeled `next`.
+    65                                  ; This loop uses LODSW at SI to fetch the next code field, moves it to DI,
+    66                                  ; and jumps indirectly via `jmp word[di]`. All words, primitive or colon-
+    67                                  ; defined, are dispatched through this loop, defining the indirect threading
+    68                                  ; model.
+    69                                  
+    70                                  ; -----------------------
+    71                                  ; Register Usage
+    72                                  ; -----------------------
+    73                                  ;   SI  - instruction pointer
+    74                                  ;   DI  - current code field pointer
+    75                                  ;   BX  - top of parameter stack
+    76                                  ;   SP  - hardware stack for remaining stack items
+    77                                  ;   BP  - software return stack pointer for colon definitions
+    78                                  
+    79                                  ; -----------------------
+    80                                  ; Colon Definitions
+    81                                  ; -----------------------
+    82                                  ; Colon definitions invoke `docolon`, which pushes the old SI onto BP,
+    83                                  ; sets SI to the new definition’s threaded code, and jumps to `next`.
+    84                                  ; `exit` restores SI from BP to resume the caller’s execution.
+    85                                  
+    86                                  ; -----------------------
+    87                                  ; Code Field Routines
+    88                                  ; -----------------------
+    89                                  ; Each dictionary entry’s code field points to a short routine:
+    90                                  ;   - Primitives perform a single machine operation and jump to `next`.
+    91                                  ;   - Colon definitions invoke `docolon`.
+    92                                  ;   - Variables and constants use `dovar` and `doconst` to push addresses
+    93                                  ;     or values before returning to `next`.
+    94                                  
+    95                                  ; -----------------------
+    96                                  ; Outer Interpreter
+    97                                  ; -----------------------
+    98                                  ; The outer interpreter reads input, tokenizes it with `word`, searches
+    99                                  ; the dictionary via `find`, and either executes or compiles based on
+   100                                  ; the current state stored in `state`. Memory is a single flat segment:
+   101                                  ; the dictionary grows upward, stacks grow downward, matching the COM file
+   102                                  ; model.
+   103                                  
+   104                                  ; -----------------------
+   105                                  ; Memory Layout & Self-Extending Behavior
+   106                                  ; -----------------------
+   107                                  ; Definitions, variables, and primitives exist alongside executable code.
+   108                                  ; New Forth words can execute additional assembly instructions. Program
+   109                                  ; flow is closely tied to memory layout, initialization, and runtime code
+   110                                  ; generation. The dictionary functions as both program and environment.
+   111                                  
+   112                                  ; -----------------------
+   113                                  ; Architectural Assumptions
+   114                                  ; -----------------------
+   115                                  ; Indirect threading is used; threaded code holds code field addresses, not
+   116                                  ; machine code; one shared interpreter loop exists; parameter and return
+   117                                  ; stacks are distinct; memory is flat. These assumptions follow early
+   118                                  ; assembly-based Forths and are reflected in Itsy’s design.
+   119                                  
+   120                                  ; -----------------------
+   121                                  ; Core Helper Routines
+   122                                  ; -----------------------
+   123                                  ;   getchar   - read a character from input
+   124                                  ;   outchar   - write a character to output
+   125                                  ;   docolon   - execute a colon-defined word
+   126                                  ;   dovar     - handle variable access
+   127                                  ;   doconst   - handle constant access
+   128                                  ;   next      - inner interpreter loop
    129                                  
-   130                                          primitive 'branch',branch
-    13                              <1>  head %1,%2,%3,$+2
-     5 00000108 [F300]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000010A 066272616E6368      <2>  db %3 + %%count,%1
-     9 00000111 [1301]              <2>  xt_ %+ %2 dw %4
-   131 00000113 8B34                            mov si,word[si]
-   132 00000115 EBD8                            jmp next
+   130                                  ;
+   131                                  ; These components together form the complete Itsy Forth system.
+   132                                  ; ==========================================================================
    133                                  
-   134                                          primitive 'execute',execute
-    13                              <1>  head %1,%2,%3,$+2
-     5 00000117 [0801]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000119 0765786563757465    <2>  db %3 + %%count,%1
-     9 00000121 [2301]              <2>  xt_ %+ %2 dw %4
-   135 00000123 89DF                            mov di,bx
-   136 00000125 5B                              pop bx
-   137 00000126 FF25                            jmp word[di]
-   138                                  
-   139                                          primitive 'exit',exit
-    13                              <1>  head %1,%2,%3,$+2
-     5 00000128 [1701]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000012A 0465786974          <2>  db %3 + %%count,%1
-     9 0000012F [3101]              <2>  xt_ %+ %2 dw %4
-   140 00000131 8B7600                          mov si,word[bp]
-   141 00000134 45                              inc bp
-   142 00000135 45                              inc bp
-   143 00000136 EBB7                            jmp next
-   144                                  
-   145                                  ; -------------------
-   146                                  ; String
-   147                                  ; -------------------
-   148                                  
-   149                                          primitive 'count',count
-    13                              <1>  head %1,%2,%3,$+2
-     5 00000138 [2801]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000013A 05636F756E74        <2>  db %3 + %%count,%1
-     9 00000140 [4201]              <2>  xt_ %+ %2 dw %4
-   150 00000142 43                              inc bx
-   151 00000143 53                              push bx
-   152 00000144 8A5FFF                          mov bl,byte[bx-1]
-   153 00000147 B700                            mov bh,0
-   154 00000149 EBA4                            jmp next
-   155                                  
-   156                                          primitive '>number',to_number
-    13                              <1>  head %1,%2,%3,$+2
-     5 0000014B [3801]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000014D 073E6E756D626572    <2>  db %3 + %%count,%1
-     9 00000155 [5701]              <2>  xt_ %+ %2 dw %4
-   157 00000157 5F                              pop di
-   158 00000158 59                              pop cx
-   159 00000159 58                              pop ax
-   160 0000015A 85DB                    to_numl test bx,bx
-   161 0000015C 7433                            je to_numz
-   162 0000015E 50                              push ax
-   163 0000015F 8A05                            mov al,byte[di]
-   164 00000161 3C61                            cmp al,'a'
-   165 00000163 7202                            jc to_nums
-   166 00000165 2C20                            sub al,32
-   167 00000167 3C3A                    to_nums cmp al,'9'+1
-   168 00000169 7206                            jc to_numg
-   169 0000016B 3C41                            cmp al,'A'
-   170 0000016D 7223                            jc to_numh
-   171 0000016F 2C07                            sub al,7
-   172 00000171 2C30                    to_numg sub al,48
-   173 00000173 B400                            mov ah,0
-   174 00000175 3A06[3500]                      cmp al,byte[val_base]
-   175 00000179 7317                            jnc to_numh
-   176 0000017B 92                              xchg ax,dx
-   177 0000017C 58                              pop ax
-   178 0000017D 52                              push dx
-   179 0000017E 91                              xchg ax,cx
-   180 0000017F F726[3500]                      mul word[val_base]
-   181 00000183 91                              xchg ax,cx
-   182 00000184 F726[3500]                      mul word[val_base]
-   183 00000188 01D1                            add cx,dx
-   184 0000018A 5A                              pop dx
-   185 0000018B 01D0                            add ax,dx
-   186 0000018D 4B                              dec bx
-   187 0000018E 47                              inc di
-   188 0000018F EBC9                            jmp to_numl
-   189 00000191 50                      to_numz push ax
-   190 00000192 51                      to_numh push cx
-   191 00000193 57                              push di
-   192 00000194 E958FF                          jmp next
-   193                                  
-   194                                  ; -----------------------
-   195                                  ; Terminal Input / Output
-   196                                  ; -----------------------
-   197                                  
-   198                                          primitive 'accept',accept
-    13                              <1>  head %1,%2,%3,$+2
-     5 00000197 [4B01]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000199 06616363657074      <2>  db %3 + %%count,%1
-     9 000001A0 [A201]              <2>  xt_ %+ %2 dw %4
-   199 000001A2 5F                              pop di
-   200 000001A3 31C9                            xor cx,cx
-   201 000001A5 E89E00                  acceptl call getchar
-   202 000001A8 3C08                            cmp al,8
-   203 000001AA 7513                            jne acceptn
-   204 000001AC E319                            jcxz acceptb
-   205 000001AE E89C00                          call outchar
-   206 000001B1 B020                            mov al,' '
-   207 000001B3 E89700                          call outchar
-   208 000001B6 B008                            mov al,8
-   209 000001B8 E89200                          call outchar
-   210 000001BB 49                              dec cx
-   211 000001BC 4F                              dec di
-   212 000001BD EBE6                            jmp acceptl
-   213 000001BF 3C0D                    acceptn cmp al,13
-   214 000001C1 7412                            je acceptz
-   215 000001C3 39D9                            cmp cx,bx
-   216 000001C5 7507                            jne accepts
-   217 000001C7 B007                    acceptb mov al,7
-   218 000001C9 E88100                          call outchar
-   219 000001CC EBD7                            jmp acceptl
-   220 000001CE AA                      accepts stosb
-   221 000001CF 41                              inc cx
-   222 000001D0 E87A00                          call outchar
-   223 000001D3 EBD0                            jmp acceptl
-   224 000001D5 E3F0                    acceptz jcxz acceptb
-   225 000001D7 B00D                            mov al,13
-   226 000001D9 E87100                          call outchar
-   227 000001DC B00A                            mov al,10
-   228 000001DE E86C00                          call outchar
-   229 000001E1 89CB                            mov bx,cx
-   230 000001E3 E909FF                          jmp next
-   231                                  
-   232                                          primitive 'word',word
-    13                              <1>  head %1,%2,%3,$+2
-     5 000001E6 [9701]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 000001E8 04776F7264          <2>  db %3 + %%count,%1
-     9 000001ED [EF01]              <2>  xt_ %+ %2 dw %4
-   233 000001EF 8B3E[2A00]                      mov di,word[val_dp]
-   234 000001F3 57                              push di
-   235 000001F4 89DA                            mov dx,bx
-   236 000001F6 8B1E[4A00]                      mov bx,word[val_t_i_b]
-   237 000001FA 89D9                            mov cx,bx
-   238 000001FC 031E[1600]                      add bx,word[val_to_in]
-   239 00000200 030E[2100]                      add cx,word[val_number_t_i_b]
-   240 00000204 39D9                    wordf   cmp cx,bx
-   241 00000206 7415                            je wordz
-   242 00000208 8A07                            mov al,byte[bx]
-   243 0000020A 43                              inc bx
-   244 0000020B 38D0                            cmp al,dl
-   245 0000020D 74F5                            je wordf
-   246 0000020F 47                      wordc   inc di
-   247 00000210 8805                            mov byte[di],al
-   248 00000212 39D9                            cmp cx,bx
-   249 00000214 7407                            je wordz
-   250 00000216 8A07                            mov al,byte[bx]
-   251 00000218 43                              inc bx
-   252 00000219 38D0                            cmp al,dl
-   253 0000021B 75F2                            jne wordc
-   254 0000021D C6450120                wordz   mov byte[di+1],32
-   255 00000221 A1[2A00]                        mov ax,word[val_dp]
-   256 00000224 97                              xchg ax,di
-   257 00000225 29F8                            sub ax,di
-   258 00000227 8805                            mov byte[di],al
-   259 00000229 2B1E[4A00]                      sub bx,word[val_t_i_b]
-   260 0000022D 891E[1600]                      mov word[val_to_in],bx
-   261 00000231 5B                              pop bx
-   262 00000232 E9BAFE                          jmp next
-   263                                  
-   264                                          primitive 'emit',emit
-    13                              <1>  head %1,%2,%3,$+2
-     5 00000235 [E601]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000237 04656D6974          <2>  db %3 + %%count,%1
-     9 0000023C [3E02]              <2>  xt_ %+ %2 dw %4
-   265 0000023E 93                              xchg ax,bx
-   266 0000023F E80B00                          call outchar
-   267 00000242 5B                              pop bx
-   268 00000243 E9A9FE                          jmp next
+   134                                  ; -------------------------------------
+   135                                  ; -- Program Entry Point
+   136                                  ; -------------------------------------
+   137                                  
+   138                                  ; -----------------------
+   139                                  ; Assembly Note
+   140                                  ; -----------------------
+   141                                  ; Sets the program entry point at 0100h for a DOS COM file.
+   142                                  ; Immediately jumps to the code field of the 'abort' routine (CFA).
+   143                                  ; This jump also serves to initialize the interpreter and memory state
+   144                                  ; before execution enters the main inner interpreter loop.
+   145                                  
+   146                                  ; -----------------------
+   147                                  ; Forth Note
+   148                                  ; -----------------------
+   149                                  ; At Forth level, this corresponds to performing any initial setup and
+   150                                  ; clearing the interpreter state. The 'abort' word is used to reset
+   151                                  ; or terminate execution safely, ensuring the system starts in a
+   152                                  ; known, consistent state.
+   153                                  
+   154                                  org 0100h
+   155 00000000 EB54                    jmp cfa_abort+2     ; jump to abort code start (initialize the program)
+   156                                  
+   157                                  
+   158                                  ; -------------------------------------
+   159                                  ; -- Forth Variables: all Forth words
+   160                                  ; -------------------------------------
+   161                                  
+   162                                  ; -----------------------
+   163                                  ; Assembly Note
+   164                                  ; -----------------------
+   165                                  ; This section sets up Forth variables as dictionary entries.
+   166                                  ; Each variable allocates memory for LFA, NFA, CFA, and DFA fields.
+   167                                  ; The assembler initializes links (LFA), names (NFA), and default values
+   168                                  ; (DFA). DP points to free memory for the next entry. BX is used as a
+   169                                  ; temporary pointer during initialization.
+   170                                  
+   171                                  ; -----------------------
+   172                                  ; Forth Note
+   173                                  ; -----------------------
+   174                                  ; These entries correspond to Forth variables referenced at runtime:
+   175                                  ;   state   >in   #tib   dp   base   last
+   176                                  ; They can be fetched or stored using Forth primitives (FETCH, STORE),
+   177                                  ; manipulated on the parameter stack, and accessed in colon definitions.
+   178                                  
+   179                                                                          ; state
+   180 00000002 0000                    lfa_state:          dw 0
+   181 00000004 057374617465            nfa_state:          db 5,'state'
+   182 0000000A [FC02]                  cfa_state:          dw dovar
+   183 0000000C 0000                    dfa_state:          dw 0
+   184                                  
+   185                                                                          ; to_in [>in]
+   186 0000000E [0200]                  lfa_to_in:          dw lfa_state
+   187 00000010 033E696E                nfa_to_in:          db 3,'>in'
+   188 00000014 [FC02]                  cfa_to_in:          dw  dovar
+   189 00000016 0000                    dfa_to_in:          dw 0
+   190                                  
+   191                                                                          ; ntib [#tib]
+   192 00000018 [0E00]                  lfa_ntib:           dw lfa_to_in
+   193 0000001A 0423746962              nfa_ntib:           db 4,'#tib'
+   194 0000001F [FC02]                  cfa_ntib:           dw  dovar
+   195 00000021 0000                    dfa_ntib:           dw 0
+   196                                  
+   197                                                                          ; dp
+   198 00000023 [1800]                  lfa_dp:             dw lfa_ntib
+   199 00000025 026470                  nfa_dp:             db 2,'dp'
+   200 00000028 [FC02]                  cfa_dp:             dw  dovar
+   201 0000002A [D203]                  dfa_dp:             dw freemem
+   202                                  
+   203                                                                          ; base
+   204 0000002C [2300]                  lfa_base:           dw lfa_dp
+   205 0000002E 0462617365              nfa_base:           db 4,'base'
+   206 00000033 [FC02]                  cfa_base:           dw  dovar
+   207 00000035 0A00                    dfa_base:           dw 10
+   208                                  
+   209                                                                          ; last
+   210 00000037 [2C00]                  lfa_last:           dw lfa_base
+   211 00000039 046C617374              nfa_last:           db 4,'last'
+   212 0000003E [FC02]                  cfa_last:           dw  dovar
+   213 00000040 [4003]                  dfa_last:           dw final
+   214                                  
+   215                                                                          ; tib
+   216 00000042 [3700]                  lfa_tib:            dw lfa_last
+   217 00000044 03746962                nfa_tib:            db 3,'tib'
+   218 00000048 [3903]                  cfa_tib:            dw  doconst
+   219 0000004A 0080                    dfa_tib:            dw 32768
+   220                                  
+   221                                  ; ------------------------------
+   222                                  ; -- Forth Note - Dictionary Chain
+   223                                  ; ------------------------------
+   224                                  ; The chain so far contains the dictionary head followed by the
+   225                                  ; core Forth variables:
+   226                                  ;
+   227                                  ; 0 <- state <- >in <- #tib <- dp <- base <- last <- tib
+   228                                  ;
+   229                                  ; This establishes the initial environment for the interpreter and
+   230                                  ; supports later word lookups and compilation.
+   231                                  ;
+   232                                  ; Each entry points to the previous one, forming a linked list that
+   233                                  ; supports dictionary traversal for lookup and compilation. This shows
+   234                                  ; the incremental setup of the Forth environment prior to defining
+   235                                  ; runtime primitives.
+   236                                  
+   237                                  ; -------------------------------------
+   238                                  ; -- System Primitives: all Forth words
+   239                                  ; -------------------------------------
+   240                                  ; The following entries define foundational primitives required to initialize
+   241                                  ; the Forth environment and support early runtime operations.
+   242                                  
+   243                                  ; -----------------------
+   244                                  ; Assembly Note
+   245                                  ; -----------------------
+   246                                  ; This section creates the core Forth primitives in assembly. Each
+   247                                  ; primitive is formed with a dictionary header (LFA, NFA, CFA). The
+   248                                  ; code field (CFA) points to the assembly-language routine implementing
+   249                                  ; the primitive, which is usually a jump two bytes ahead to the actual
+   250                                  ; routine. The routines are straight assembly instructions and each
+   251                                  ; ends with `jmp next` to return control to the inner interpreter. The
+   252                                  ; data field (DFA) is unused for primitives; it is used only for
+   253                                  ; variables or constants. DP tracks free memory for dictionary entries.
+   254                                  
+   255                                  ; -----------------------
+   256                                  ; Forth Note
+   257                                  ; -----------------------
+   258                                  ; These primitives are foundational and somewhat special because they
+   259                                  ; can be defined before the inner interpreter loop exists. While they
+   260                                  ; ultimately rely on `next` for control transfer, their machine
+   261                                  ; routines themselves do not depend on the inner interpreter being
+   262                                  ; fully established. They include stack operations (DUP, DROP, SWAP,
+   263                                  ; ROT), arithmetic (+, =), memory access (@, !), flow control
+   264                                  ; (BRANCH, 0BRANCH, EXIT), I/O (EMIT, ACCEPT), and mechanisms to
+   265                                  ; define new words (LIT, COLON, CONSTANT, VARIABLE). Primitives have no
+   266                                  ; associated data; variables and constants populate DFA to hold their
+   267                                  ; value or address.
+   268                                  
    269                                  
-   270 00000246 B407                    getchar mov ah,7
-   271 00000248 CD21                            int 021h
-   272 0000024A B400                            mov ah,0
-   273 0000024C C3                              ret
+   270                                  ; ---------
+   271                                  ; -- Dictionary Word: abort
+   272                                  ; -- System Initialization Primitive
+   273                                  ; ---------
    274                                  
-   275 0000024D 92                      outchar xchg ax,dx
-   276 0000024E B402                            mov ah,2
-   277 00000250 CD21                            int 021h
-   278 00000252 C3                              ret
-   279                                  
-   280                                  ; -----------------------
-   281                                  ; Dictionary Search
-   282                                  ; -----------------------
+   275                                  ; -----------------------
+   276                                  ; Assembly Note
+   277                                  ; -----------------------
+   278                                  ; This code builds the primitive `abort` entry in the dictionary. A
+   279                                  ; header is formed with LFA pointing to the previous word, NFA holding
+   280                                  ; the name, and CFA pointing two bytes ahead to the following assembly
+   281                                  ; implementation. The routine itself initializes core interpreter
+   282                                  ; state (state, >in, SP, SI) and jumps to the inner interpreter loop.
    283                                  
-   284                                          primitive 'find',find
-    13                              <1>  head %1,%2,%3,$+2
-     5 00000253 [3502]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000255 0466696E64          <2>  db %3 + %%count,%1
-     9 0000025A [5C02]              <2>  xt_ %+ %2 dw %4
-   285 0000025C BF[4000]                        mov di,val_last
-   286 0000025F 57                      findl   push di
-   287 00000260 53                              push bx
-   288 00000261 8A0F                            mov cl,byte[bx]
-   289 00000263 B500                            mov ch,0
-   290 00000265 41                              inc cx
-   291 00000266 8A4502                  findc   mov al,byte[di+2]
-   292 00000269 247F                            and al,07Fh
-   293 0000026B 3A07                            cmp al,byte[bx]
-   294 0000026D 740E                            je findm
-   295 0000026F 5B                              pop bx
-   296 00000270 5F                              pop di
-   297 00000271 8B3D                            mov di,word[di]
-   298 00000273 85FF                            test di,di
-   299 00000275 75E8                            jne findl
-   300 00000277 53                      findnf  push bx
-   301 00000278 31DB                            xor bx,bx
-   302 0000027A E972FE                          jmp next
-   303 0000027D 47                      findm   inc di
-   304 0000027E 43                              inc bx
-   305 0000027F E2E5                            loop findc
-   306 00000281 5B                              pop bx
-   307 00000282 5F                              pop di
-   308 00000283 BB0100                          mov bx,1
-   309 00000286 47                              inc di
-   310 00000287 47                              inc di
-   311 00000288 8A05                            mov al,byte[di]
-   312 0000028A A880                            test al,080h
-   313 0000028C 7502                            jne findi
-   314 0000028E F7DB                            neg bx
-   315 00000290 83E01F                  findi   and ax,31
-   316 00000293 01C7                            add di,ax
-   317 00000295 47                              inc di
-   318 00000296 57                              push di
-   319 00000297 E955FE                          jmp next
-   320                                  
-   321                                  ; -----------------------
-   322                                  ; Colon Definition
-   323                                  ; -----------------------
-   324                                  
-   325                                          colon ':',colon
-    17                              <1>  head %1,%2,%3,docolon
-     5 0000029A [5302]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 0000029C 013A                <2>  db %3 + %%count,%1
-     9 0000029E [AC02]              <2>  xt_ %+ %2 dw %4
-   326 000002A0 [8400]FFFF[0A00]-               dw xt_lit,-1,xt_state,xt_store,xt_create
-   326 000002A6 [E800][D602]       
-   327 000002AA [0D03]                          dw xt_do_semi_code
-   328 000002AC 4D                      docolon dec bp
-   329 000002AD 4D                              dec bp
-   330 000002AE 897600                          mov word[bp],si
-   331 000002B1 8D7502                          lea si,[di+2]
-   332 000002B4 E938FE                          jmp next
-   333                                  
-   334                                          colon ';',semicolon,immediate
-    17                              <1>  head %1,%2,%3,docolon
-     5 000002B7 [9A02]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 000002B9 813B                <2>  db %3 + %%count,%1
-     9 000002BB [AC02]              <2>  xt_ %+ %2 dw %4
-   335 000002BD [8400][2F01][6F00]-             dw xt_lit,xt_exit,xt_comma,xt_lit,0,xt_state
-   335 000002C3 [8400]0000[0A00]   
-   336 000002C9 [E800][2F01]                    dw xt_store,xt_exit
-   337                                  
-   338                                  ; -----------------------
-   339                                  ; Headers
-   340                                  ; -----------------------
-   341                                  
-   342                                          colon 'create',create
-    17                              <1>  head %1,%2,%3,docolon
-     5 000002CD [B702]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 000002CF 06637265617465      <2>  db %3 + %%count,%1
-     9 000002D6 [AC02]              <2>  xt_ %+ %2 dw %4
-   343 000002D8 [2800][DE00][3E00]-             dw xt_dp,xt_fetch,xt_last,xt_fetch,xt_comma
-   343 000002DE [DE00][6F00]       
-   344 000002E2 [3E00][E800][8400]-             dw xt_last,xt_store,xt_lit,32,xt_word,xt_count
-   344 000002E8 2000[ED01][4001]   
-   345 000002EE [C300][2800][E800]-             dw xt_plus,xt_dp,xt_store,xt_lit,0,xt_comma
-   345 000002F4 [8400]0000[6F00]   
-   346 000002FA [0D03]                          dw xt_do_semi_code
-   347 000002FC 53                      dovar   push bx
-   348 000002FD 8D5D02                          lea bx,[di+2]
-   349 00000300 E9ECFD                          jmp next
-   350                                  
-   351                                          primitive '(;code)',do_semi_code
-    13                              <1>  head %1,%2,%3,$+2
-     5 00000303 [CD02]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000305 07283B636F646529    <2>  db %3 + %%count,%1
-     9 0000030D [0F03]              <2>  xt_ %+ %2 dw %4
-   352 0000030F 8B3E[4000]                      mov di,word[val_last]
-   353 00000313 8A4502                          mov al,byte[di+2]
-   354 00000316 83E01F                          and ax,31
-   355 00000319 01C7                            add di,ax
-   356 0000031B 897503                          mov word[di+3],si
-   357 0000031E 8B7600                          mov si,word[bp]
-   358 00000321 45                              inc bp
-   359 00000322 45                              inc bp
-   360 00000323 E9C9FD                          jmp next
-   361                                  
-   362                                  ; -----------------------
-   363                                  ; Constants
-   364                                  ; -----------------------
-   365                                  
-   366                                          colon 'constant',constant
-    17                              <1>  head %1,%2,%3,docolon
-     5 00000326 [0303]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000328 08636F6E7374616E74  <2>  db %3 + %%count,%1
-     9 00000331 [AC02]              <2>  xt_ %+ %2 dw %4
-   367 00000333 [D602][6F00][0D03]              dw xt_create,xt_comma,xt_do_semi_code
-   368 00000339 53                      doconst push bx
-   369 0000033A 8B5D02                          mov bx,word[di+2]
-   370 0000033D E9AFFD                          jmp next
-   371                                  
-   372                                  ; -----------------------
-   373                                  ; Outer Interpreter
-   374                                  ; -----------------------
-   375                                  
-   376                                  final:
-   377                                          colon 'interpret',interpret
-    17                              <1>  head %1,%2,%3,docolon
-     5 00000340 [2603]              <2>  %%link dw link
-     6                              <2>  %define link %%link
-     7                              <2>  %strlen %%count %1
-     8 00000342 09696E746572707265- <2>  db %3 + %%count,%1
-     8 0000034B 74                  <2>
-     9 0000034C [AC02]              <2>  xt_ %+ %2 dw %4
-   378 0000034E [1F00][DE00][1400]-     interpt dw xt_number_t_i_b,xt_fetch,xt_to_in,xt_fetch
-   378 00000354 [DE00]             
-   379 00000356 [CE00][FD00][7003]-             dw xt_equals,xt_zero_branch,intpar,xt_t_i_b
-   379 0000035C [4800]             
-   380 0000035E [8400]3200[A001]-               dw xt_lit,50,xt_accept,xt_number_t_i_b,xt_store
-   380 00000364 [1F00][E800]       
-   381 00000368 [8400]0000[1400]-               dw xt_lit,0,xt_to_in,xt_store
-   381 0000036E [E800]             
-   382 00000370 [8400]2000[ED01]-       intpar  dw xt_lit,32,xt_word,xt_find,xt_dupe
-   382 00000376 [5A02][AC00]       
-   383 0000037A [FD00][9403][0A00]-             dw xt_zero_branch,intnf,xt_state,xt_fetch
-   383 00000380 [DE00]             
-   384 00000382 [CE00][FD00][8E03]-             dw xt_equals,xt_zero_branch,intexc,xt_comma
-   384 00000388 [6F00]             
-   385 0000038A [1101][CE03]                    dw xt_branch,intdone
-   386 0000038E [2101][1101][CE03]      intexc  dw xt_execute,xt_branch,intdone
-   387 00000394 [AC00][9100][4001]-     intnf   dw xt_dupe,xt_rote,xt_count,xt_to_number
-   387 0000039A [5501]             
-   388 0000039C [FD00][BA03][0A00]-             dw xt_zero_branch,intskip,xt_state,xt_fetch
-   388 000003A2 [DE00]             
-   389 000003A4 [FD00][B803][3E00]-             dw xt_zero_branch,intnc,xt_last,xt_fetch,xt_dupe
-   389 000003AA [DE00][AC00]       
-   390 000003AE [DE00][3E00][E800]-             dw xt_fetch,xt_last,xt_store,xt_dp,xt_store
-   390 000003B4 [2800][E800]       
-   391 000003B8 [5400]                  intnc   dw xt_abort
-   392 000003BA [A100][A100][0A00]-     intskip dw xt_drop, xt_drop, xt_state, xt_fetch
-   392 000003C0 [DE00]             
-   393 000003C2 [FD00][CE03][8400]-             dw xt_zero_branch,intdone,xt_lit,xt_lit,xt_comma
-   393 000003C8 [8400][6F00]       
-   394 000003CC [6F00]                          dw xt_comma
-   395 000003CE [1101][4E03]            intdone dw xt_branch,interpt
-   396                                  
-   397                                  freemem:
-   398                                  
+   284                                  ; -----------------------
+   285                                  ; Forth Note
+   286                                  ; -----------------------
+   287                                  ; abort is a special primitive required to bootstrap the system.
+   288                                  ; It sets up initial stack and interpreter state so subsequent Forth
+   289                                  ; words can execute. Though it precedes the fully defined inner
+   290                                  ; interpreter, it relies on next to dispatch execution of other words.
+   291                                  ; abort is also callable by Forth user programs to reset the interpreter
+   292                                  ; state and exit a running definition safely.
+   293                                  
+   294                                                                          ; abort
+   295 0000004C [4200]                  lfa_abort:          dw lfa_tib
+   296 0000004E 0561626F7274            nfa_abort:          db 5,'abort'
+   297 00000054 [5600]                  cfa_abort:          dw $+2
+   298                                  
+   299 00000056 A1[2100]                                    mov ax,word[dfa_ntib]       ; load value in #tib (0 to start)
+   300 00000059 A3[1600]                                    mov word[dfa_to_in],ax      ; Sets >in the value in #tib
+   301 0000005C 31ED                                        xor bp,bp                   ; clear bp (used to move 0 into state)
+   302 0000005E 892E[0C00]                                  mov word[dfa_state],bp      ; sets state to 0 (enter interpret mode)
+   303 00000062 BC00FF                                      mov sp,-256                 ; reserves a 256-byte stack from top of segment           
+   304 00000065 BE[4E03]                                    mov si,cfa_interpret+2      ; set si to interpreter code start
+   305 00000068 E98400                                      jmp next                    ; jump to inner interpreter’s dispatch loop
+   306                                  
+   307                                  ; ---------
+   308                                  ; -- Dictionary Words: comma [,] , lit
+   309                                  ; -- Compilation Primitives
+   310                                  ; ---------
+   311                                  
+   312                                  ; -----------------------
+   313                                  ; Assembly Note
+   314                                  ; -----------------------
+   315                                  ; `comma` builds a threaded code cell in the dictionary by storing
+   316                                  ; the value in AX (swapped with BX) at the current dictionary pointer.
+   317                                  ; The dictionary pointer is then updated, and execution returns to
+   318                                  ; the inner interpreter via `jmp next`.
+   319                                  
+   320                                  ; -----------------------
+   321                                  ; Forth Note
+   322                                  ; -----------------------
+   323                                  ; `comma` (`,`) is a compilation primitive used by colon definitions
+   324                                  ; to append a cell to the threaded code of the currently compiling word.
+   325                                  ; It operates directly on the dictionary and does not execute code itself.
+   326                                  
+   327                                                                          ; comma [,]
+   328 0000006B [4C00]                  lfa_comma:          dw lfa_abort
+   329 0000006D 012C                    nfa_comma:          db 1,','
+   330 0000006F [7100]                  cfa_comma:          dw $+2
+   331                                  
+   332 00000071 8B3E[2A00]                                  mov di,word[dfa_dp]
+   333 00000075 93                                          xchg ax,bx
+   334 00000076 AB                                          stosw
+   335 00000077 893E[2A00]                                  mov word[dfa_dp],di
+   336 0000007B 5B                                          pop bx
+   337 0000007C EB71                                        jmp next
+   338                                  
+   339                                  ; -----------------------
+   340                                  ; Assembly Note
+   341                                  ; -----------------------
+   342                                  ; `lit` fetches the next word-sized literal from the dictionary using
+   343                                  ; LODSW, pushes BX to preserve the top of the parameter stack, swaps AX/BX,
+   344                                  ; and returns to the inner interpreter via `jmp next`. This creates a
+   345                                  ; runtime literal for subsequent execution.
+   346                                  
+   347                                  ; -----------------------
+   348                                  ; Forth Note
+   349                                  ; -----------------------
+   350                                  ; `lit` is a compilation primitive that pushes a literal value onto the
+   351                                  ; parameter stack when executed. It is typically invoked by colon definitions
+   352                                  ; to embed constants directly in threaded code.
+   353                                  
+   354                                                                          ; lit
+   355 0000007E [6B00]                  lfa_lit:            dw lfa_comma
+   356 00000080 036C6974                nfa_lit:            db 3,'lit'
+   357 00000084 [8600]                  cfa_lit:            dw $+2
+   358                                  
+   359 00000086 53                                          push bx
+   360 00000087 AD                                          lodsw
+   361 00000088 93                                          xchg ax,bx
+   362 00000089 EB64                                        jmp next
+   363                                  
+   364                                  ; ---------
+   365                                  ; -- Dictionary Words: rot, drop, dup, swap
+   366                                  ; -- Stack Primitives
+   367                                  ; ---------
+   368                                  
+   369                                  ; -----------------------
+   370                                  ; -- Assembly Note - stack primitives
+   371                                  ; -----------------------
+   372                                  ; Each primitive is implemented as a short assembly routine.
+   373                                  ; `rot` pops two items off the parameter stack (BX/SP), rearranges
+   374                                  ; them, and pushes them back in rotated order. `drop` pops the top
+   375                                  ; item. `dup` pushes a copy of the top item. `swap` exchanges the
+   376                                  ; top two items. Each routine ends with `jmp next` to return to the
+   377                                  ; inner interpreter loop.
+   378                                  
+   379                                  ; -----------------------
+   380                                  ; -- Forth Note - stack primitives
+   381                                  ; -----------------------
+   382                                  ; These stack primitives manipulate the parameter stack directly.
+   383                                  ; They are fundamental to word execution and composition, forming
+   384                                  ; the basis for arithmetic, logic, and control flow in Forth.
+   385                                  
+   386                                  ; -----------------------
+   387                                  ; -- Assembly Note - rot
+   388                                  ; -----------------------
+   389                                  ; Implements rot in straight x86 assembly: pops two values into
+   390                                  ; registers, pushes them back in rotated order, then swaps AX/BX.
+   391                                  ; Ends with jmp next to continue inner interpreter dispatch.
+   392                                  
+   393                                  ; -----------------------
+   394                                  ; -- Forth Note - rot
+   395                                  ; -----------------------
+   396                                  ; `rot` rearranges the top three items of the parameter stack. In
+   397                                  ; Forth code, it allows manipulation of stack order for arithmetic
+   398                                  ; or data access.
+   399                                  
+   400                                                                          ; rot
+   401 0000008B [7E00]                  lfa_rot:            dw lfa_lit
+   402 0000008D 03726F74                nfa_rot:            db 3,'rot'
+   403 00000091 [9300]                  cfa_rot:            dw $+2
+   404                                  
+   405 00000093 5A                                          pop dx
+   406 00000094 58                                          pop ax
+   407 00000095 52                                          push dx
+   408 00000096 53                                          push bx
+   409 00000097 93                                          xchg ax,bx
+   410 00000098 EB55                                        jmp next
+   411                                  
+   412                                  ; -----------------------
+   413                                  ; -- Assembly Note - drop
+   414                                  ; -----------------------
+   415                                  ; Implements `drop` by popping the top item off the parameter stack
+   416                                  ; into BX, effectively discarding it. Ends with `jmp next` to resume
+   417                                  ; inner interpreter dispatch.
+   418                                  
+   419                                  ; ---------------------
+   420                                  ; -- Forth Note - drop
+   421                                  ; ---------------------
+   422                                  ; `drop` removes the top stack item. It’s one of the most basic
+   423                                  ; stack manipulation words and is used pervasively in Forth code.
+   424                                  
+   425                                                                          ; drop
+   426 0000009A [8B00]                  lfa_drop:           dw lfa_rot
+   427 0000009C 0464726F70              nfa_drop:           db 4,'drop'
+   428 000000A1 [A300]                  cfa_drop:           dw $+2
+   429                                  
+   430 000000A3 5B                                          pop bx
+   431 000000A4 EB49                                        jmp next
+   432                                  
+   433                                  ; -----------------------
+   434                                  ; -- Assembly Note - dup
+   435                                  ; -----------------------
+   436                                  ; Implements `dup` by pushing BX, which holds the top of the parameter
+   437                                  ; stack, creating a duplicate of the top item. Ends with `jmp next`.
+   438                                  
+   439                                  ; ---------------------
+   440                                  ; -- Forth Note - dup
+   441                                  ; ---------------------
+   442                                  ; `dup` duplicates the top stack item. It’s a core stack operation used
+   443                                  ; frequently in arithmetic, control structures, and data handling.
+   444                                  
+   445                                                                          ; dup
+   446 000000A6 [9A00]                  lfa_dup:            dw lfa_drop
+   447 000000A8 03647570                nfa_dup:            db 3,'dup'
+   448 000000AC [AE00]                  cfa_dup:            dw $+2
+   449                                  
+   450 000000AE 53                                          push bx
+   451 000000AF EB3E                                        jmp next
+   452                                  
+   453                                  ; ------------------------
+   454                                  ; -- Assembly Note - swap
+   455                                  ; ------------------------
+   456                                  ; Implements `swap` by popping the second stack item into AX, pushing
+   457                                  ; the top item (BX), then exchanging AX and BX. This flips the top
+   458                                  ; two stack items. Ends with `jmp next`.
+   459                                  
+   460                                  ; ----------------------
+   461                                  ; -- Forth Note - swap
+   462                                  ; ----------------------
+   463                                  ; `swap` exchanges the top two stack items. It is a fundamental
+   464                                  ; stack manipulation word, often paired with `dup` and `rot`.
+   465                                  
+   466                                                                          ; swap
+   467 000000B1 [A600]                  lfa_swap:           dw lfa_dup
+   468 000000B3 0473776170              nfa_swap:           db 4,'swap'
+   469 000000B8 [BA00]                  cfa_swap:           dw $+2
+   470                                  
+   471 000000BA 58                                          pop ax
+   472 000000BB 53                                          push bx
+   473 000000BC 93                                          xchg ax,bx
+   474 000000BD EB30                                        jmp next
+   475                                  
+   476                                  ; ---------
+   477                                  ; -- Dictionary Words: plus [+], equals [=]
+   478                                  ; -- Math and Logic Primitives
+   479                                  ; ---------
+   480                                  
+   481                                  ; ------------------------------
+   482                                  ; -- Assembly Note - Math and Logic Primitives
+   483                                  ; ------------------------------
+   484                                  ; Math and logic primitives are implemented with short inlined assembly
+   485                                  ; sequences that operate directly on the parameter stack using AX and BX.
+   486                                  ; Arithmetic words like `+` modify BX in place, while logic words like `=`
+   487                                  ; perform comparisons and set BX to true (-1) or false (0). Each ends with
+   488                                  ; `jmp next` to return to the inner interpreter.
+   489                                  
+   490                                  ; ----------------------------
+   491                                  ; -- Forth Note - Math and Logic Primitives
+   492                                  ; ----------------------------
+   493                                  ; These primitives provide the core arithmetic and comparison operations
+   494                                  ; needed by Forth programs. They manipulate values on the parameter stack
+   495                                  ; and return results in the standard Forth fashion, supporting control
+   496                                  ; structures, calculations, and decision-making.
+   497                                  
+   498                                  ; ------------------------
+   499                                  ; -- Assembly Note - plus
+   500                                  ; ------------------------
+   501                                  ; Implements `+` by popping the second stack item into AX, adding it
+   502                                  ; to BX (top of stack), and leaving the result in BX. Ends with
+   503                                  ; `jmp next` to resume interpretation.
+   504                                  
+   505                                  ; ----------------------
+   506                                  ; -- Forth Note - plus
+   507                                  ; ----------------------
+   508                                  ; `+` adds the top two stack items and pushes the result. It’s a core
+   509                                  ; arithmetic primitive used throughout Forth code.
+   510                                  
+   511                                                                          ; plus [+]
+   512 000000BF [B100]                  lfa_plus:           dw lfa_swap
+   513 000000C1 012B                    nfa_plus:           db 1,'+'
+   514 000000C3 [C500]                  cfa_plus:           dw $+2
+   515                                  
+   516 000000C5 58                                          pop ax
+   517 000000C6 01C3                                        add bx,ax
+   518 000000C8 EB25                                        jmp next
+   519                                  
+   520                                  ; --------------------------
+   521                                  ; -- Assembly Note - equals
+   522                                  ; --------------------------
+   523                                  ; Implements `=` by popping the second stack item into AX and comparing
+   524                                  ; it with BX. Sets BX to true (-1) if equal, or false (0) if not. Ends
+   525                                  ; with `jmp next`.
+   526                                  
+   527                                  ; ------------------------
+   528                                  ; -- Forth Note - equals
+   529                                  ; ------------------------
+   530                                  ; `=` compares the top two stack items and pushes a true flag (-1) if
+   531                                  ; they are equal, or false (0) otherwise. This is a basic logical
+   532                                  ; primitive used in conditionals and branching.
+   533                                  
+   534                                                                          ; equals [=]
+   535 000000CA [BF00]                  lfa_equals:         dw lfa_plus
+   536 000000CC 013D                    nfa_equals:         db 1,'='
+   537 000000CE [D000]                  cfa_equals:         dw $+2
+   538                                  
+   539 000000D0 58                                          pop ax
+   540 000000D1 29C3                                        sub bx,ax
+   541 000000D3 83EB01                                      sub bx,1
+   542 000000D6 19DB                                        sbb bx,bx
+   543 000000D8 EB15                                        jmp next
+   544                                  
+   545                                  ; ---------
+   546                                  ; -- Dictionary Words: fetch [@], store [!]
+   547                                  ; -- Memory Access Primitives
+   548                                  ; ---------
+   549                                  
+   550                                  ; -----------------------
+   551                                  ; -- Assembly Note - Memory Access Primitives
+   552                                  ; -----------------------
+   553                                  ; These primitives implement direct memory fetch and store using the
+   554                                  ; address on the parameter stack. `fetch` loads the 16-bit value at
+   555                                  ; the address in BX into BX. `store` writes the top of stack to the
+   556                                  ; address in BX, then pops the address itself. Both end with `jmp next`.
+   557                                  
+   558                                  ; -----------------------
+   559                                  ; -- Forth Note - Memory Access Primitives
+   560                                  ; -----------------------
+   561                                  ; `@` and `!` provide the fundamental mechanism for reading and writing
+   562                                  ; memory in Forth. `@` replaces the top stack item (an address) with the
+   563                                  ; contents of that address. `!` takes a value and an address from the stack
+   564                                  ; and stores the value into that address. They are low-level building blocks
+   565                                  ; for variables, constants, and user data structures.
+   566                                  
+   567                                  ; -----------------------
+   568                                  ; -- Assembly Note - fetch [@]
+   569                                  ; -----------------------
+   570                                  ; Loads the 16-bit word at [BX] into BX. This replaces the address on top
+   571                                  ; of the stack with the fetched value. Ends with `jmp next`.
+   572                                  
+   573                                  ; -----------------------
+   574                                  ; -- Forth Note - fetch [@]
+   575                                  ; -----------------------
+   576                                  ; Takes an address from the stack and replaces it with the contents of
+   577                                  ; that address.
+   578                                  
+   579                                                                          ; fetch [!]
+   580 000000DA [CA00]                  lfa_fetch:          dw lfa_equals
+   581 000000DC 0140                    nfa_fetch:          db 1,'@'
+   582 000000DE [E000]                  cfa_fetch:          dw $+2
+   583                                  
+   584 000000E0 8B1F                                        mov bx,word[bx]
+   585 000000E2 EB0B                                        jmp next
+   586                                  
+   587                                  ; -----------------------
+   588                                  ; -- Assembly Note - store [!]
+   589                                  ; -----------------------
+   590                                  ; Pops the top of stack into [BX], then pops the address itself into BX.
+   591                                  ; This stores the value at the specified address, then discards the address.
+   592                                  ; Ends with `jmp next`.
+   593                                  
+   594                                  ; -----------------------
+   595                                  ; -- Forth Note - store [!]
+   596                                  ; -----------------------
+   597                                  ; Takes a value and an address from the stack and stores the value at
+   598                                  ; the address. The address and value are both consumed.
+   599                                  
+   600                                                                          ; store [!]
+   601 000000E4 [DA00]                  lfa_store:          dw lfa_fetch
+   602 000000E6 0121                    nfa_store:          db 1,'!'
+   603 000000E8 [EA00]                  cfa_store:          dw $+2
+   604                                  
+   605 000000EA 8F07                                        pop word[bx]
+   606 000000EC 5B                                          pop bx
+   607 000000ED EB00                                        jmp next
+   608                                  
+   609                                  ; ------------------------------
+   610                                  ; -- Forth Note - Word Chain after Core Primitives
+   611                                  ; ------------------------------
+   612                                  ; The dictionary now includes the head, core variables, and the
+   613                                  ; foundational primitives required to bootstrap the inner interpreter:
+   614                                  ;
+   615                                  ;   0 <- state <- to_in [>in] <- ntib [#tib] <- dp <- base <- last <- tib
+   616                                  ;
+   617                                  ; Each entry links to the previous one, forming a chain that supports
+   618                                  ; early lookup and compilation. This setup allows the inner interpreter
+   619                                  ; to begin executing once defined and provides the minimal environment
+   620                                  ; for primitive operations.
+   621                                  
+   622                                  ; -------------------------------------
+   623                                  ; -- Inner Interpreter (next)
+   624                                  ; -- Forth Fetch-and-Execute Loop
+   625                                  ; -------------------------------------
+   626                                  
+   627                                  ; --------------------------------------------------------------------
+   628                                  ; This is the classic indirect threaded Forth inner interpreter, called “next.”
+   629                                  ; Each Forth word’s definition consists of a list of code field addresses (cfa).
+   630                                  ; next repeatedly fetches the next cfa and executes the code it points to.
+   631                                  ;
+   632                                  ; Each word’s code executes, then typically returns to next to process the next cfa.
+   633                                  ; This dispatch loop is the core of the Forth execution model.
+   634                                  ;
+   635                                  ; Startup behavior:
+   636                                  ;   si is initialized to cfa_interpret+2 and execution jumps to next.
+   637                                  ;   This skips fetching interpret’s own cfa.
+   638                                  ;   The first lodsw fetches the cfa of the first word in interpret’s thread
+   639                                  ;   and jumps to it, entering the interpreter loop directly.
+   640                                  ;
+   641                                  ; The next routine appears here among the word definitions because it is
+   642                                  ; part of the runtime environment and is referenced like any other word.
+   643                                  ; Placing it here allows references to its address to be resolved during the build
+   644                                  ; and ensures it participates in the threaded code sequence.
+   645                                  ; --------------------------------------------------------------------
+   646                                  
+   647 000000EF AD                      next:               lodsw               ; load word at [si] into ax, increment si by 2
+   648 000000F0 97                                          xchg di,ax          ; di now holds the fetched cfa
+   649 000000F1 FF25                                        jmp word[di]        ; indirect jump to the cfa
+   650                                  
+   651                                  ; -------------------------------------
+   652                                  ; -- Interpreter-Dependent Primitives
+   653                                  ; -- Require the inner interpreter to execute via cfa
+   654                                  ; -------------------------------------
+   655                                  
+   656                                  ; ------------------------------
+   657                                  ; -- Assembly Note - Interpreter-Dependent Primitives
+   658                                  ; ------------------------------
+   659                                  ; These primitives are implemented as standard threaded-code routines that
+   660                                  ; assume the inner interpreter is active. They use indirect jumps through
+   661                                  ; code field addresses to transfer control, relying on the interpreter’s
+   662                                  ; fetch-and-dispatch loop rather than executing standalone machine code.
+   663                                  
+   664                                  ; ----------------------------
+   665                                  ; -- Forth Note - Interpreter-Dependent Primitives
+   666                                  ; ----------------------------
+   667                                  ; These words form part of the core runtime and require the inner interpreter
+   668                                  ; to be running. They rely on `next` to fetch and execute the code field
+   669                                  ; addresses of subsequent words, integrating tightly with the interpreter’s
+   670                                  ; control flow.
+   671                                  
+   672                                  
+   673                                  ; ---------
+   674                                  ; -- Dictionary words: zero_branch [0branch], branch, execute, exit
+   675                                  ; -- Colon Flow Control Primitives
+   676                                  ; ---------
+   677                                  
+   678                                  ; ------------------------------
+   679                                  ; -- Assembly Note - Colon Flow Control Primitives
+   680                                  ; ------------------------------
+   681                                  ; These primitives manage control flow within colon definitions. `0branch`
+   682                                  ; conditionally skips ahead by a 16-bit offset if the top of stack is zero.
+   683                                  ; `branch` always jumps ahead by the given offset. `execute` transfers control
+   684                                  ; to the cfa on the stack, and `exit` returns to the caller by restoring the
+   685                                  ; interpreter’s instruction pointer. Each uses direct manipulation of SI and
+   686                                  ; indirect jumps to integrate with the threaded execution model.
+   687                                  
+   688                                  ; ----------------------------
+   689                                  ; -- Forth Note - Colon Flow Control Primitives
+   690                                  ; ----------------------------
+   691                                  ; These primitives implement the basic control structures used in colon
+   692                                  ; definitions. `0branch` and `branch` handle conditional and unconditional
+   693                                  ; jumps within a thread. `execute` allows computed transfers of control,
+   694                                  ; and `exit` returns from a colon definition. Together they enable looping,
+   695                                  ; branching, and dynamic execution flow in Forth programs.
+   696                                  
+   697                                  ; ------------------------------
+   698                                  ; -- Assembly Note - zero_branch
+   699                                  ; ------------------------------
+   700                                  ; Fetches a 16-bit offset from the thread, tests BX, and if zero updates SI.
+   701                                  ; Otherwise continues execution. Ends with `jmp next` to return to the inner interpreter.
+   702                                  
+   703                                  ; ----------------------------
+   704                                  ; -- Forth Note - zero_branch
+   705                                  ; ----------------------------
+   706                                  ; Implements conditional branching in colon definitions. Skips the following code
+   707                                  ; if the top of stack is false (0), supporting if-then and loop constructs.
+   708                                  
+   709                                                                          ; zero_branch [0branch]
+   710 000000F3 [E400]                  lfa_zero_branch:    dw lfa_store
+   711 000000F5 07306272616E6368        nfa_zero_branch:    db 7,'0branch'
+   712 000000FD [FF00]                  cfa_zero_branch:    dw $+2
+   713                                  
+   714 000000FF AD                                          lodsw
+   715 00000100 85DB                                        test bx,bx
+   716 00000102 7501                                        jne zerob_z
+   717 00000104 96                                          xchg ax,si
+   718 00000105 5B                      zerob_z:            pop bx
+   719 00000106 EBE7                                        jmp next
+   720                                  
+   721                                  ; ------------------------------
+   722                                  ; -- Assembly Note - branch
+   723                                  ; ------------------------------
+   724                                  ; Loads a 16-bit offset from the thread and updates SI unconditionally.
+   725                                  ; Ends with `jmp next` to continue inner interpreter dispatch.
+   726                                  
+   727                                  ; ----------------------------
+   728                                  ; -- Forth Note - branch
+   729                                  ; ----------------------------
+   730                                  ; Implements unconditional branching in colon definitions, used for loops and jumps.
+   731                                  
+   732                                                                          ; branch
+   733 00000108 [F300]                  lfa_branch:         dw lfa_zero_branch
+   734 0000010A 066272616E6368          nfa_branch:         db 6,'branch'
+   735 00000111 [1301]                  cfa_branch:         dw $+2
+   736                                  
+   737 00000113 8B34                                        mov si,word[si]
+   738 00000115 EBD8                                        jmp next
+   739                                  
+   740                                  ; ------------------------------
+   741                                  ; -- Assembly Note - execute
+   742                                  ; ------------------------------
+   743                                  ; Loads the CFA from the top of stack (BX) into DI, pops BX, and jumps to that CFA.
+   744                                  ; This allows one word to invoke another dynamically at runtime.
+   745                                  
+   746                                  ; ----------------------------
+   747                                  ; -- Forth Note - execute
+   748                                  ; ----------------------------
+   749                                  ; Performs indirect execution of any Forth word. Supports higher-order programming
+   750                                  ; and dynamic execution within colon definitions.
+   751                                  
+   752                                  
+   753                                                                          ; execute
+   754 00000117 [0801]                  lfa_execute:        dw lfa_branch
+   755 00000119 0765786563757465        nfa_execute:        db 7,'execute'
+   756 00000121 [2301]                  cfa_execute:        dw $+2
+   757                                  
+   758 00000123 89DF                                        mov di,bx
+   759 00000125 5B                                          pop bx
+   760 00000126 FF25                                        jmp word[di]
+   761                                  
+   762                                  ; ------------------------------
+   763                                  ; -- Assembly Note - exit
+   764                                  ; ------------------------------
+   765                                  ; Restores SI from the return stack via BP, increments BP twice, and jumps to `next`.
+   766                                  ; Returns control from a colon definition back to the calling context.
+   767                                  
+   768                                  ; ----------------------------
+   769                                  ; -- Forth Note - exit
+   770                                  ; ----------------------------
+   771                                  ; Ends execution of a colon definition and returns to the calling word.
+   772                                  ; Essential for structured control flow in Forth programs.
+   773                                  
+   774                                                                          ; exit
+   775 00000128 [1701]                  lfa_exit:           dw lfa_execute
+   776 0000012A 0465786974              nfa_exit:           db 4,'exit'
+   777 0000012F [3101]                  cfa_exit:           dw $+2
+   778                                  
+   779 00000131 8B7600                                      mov si,word[bp]
+   780 00000134 45                                          inc bp
+   781 00000135 45                                          inc bp
+   782 00000136 EBB7                                        jmp next
+   783                                  
+   784                                  ; ---------
+   785                                  ; -- Dictionary words: count, to_number [>number]
+   786                                  ; -- String Primitives
+   787                                  ; ---------
+   788                                  
+   789                                  ; ------------------------------
+   790                                  ; -- Assembly Note - String Primitives
+   791                                  ; ------------------------------
+   792                                  ; String primitives manipulate memory addresses and counters to handle
+   793                                  ; Forth strings. `count` loads the length-prefixed string and pushes its
+   794                                  ; address and length. `>number` converts character sequences into numeric
+   795                                  ; values, updating the parameter stack. Each ends with `jmp next`.
+   796                                  
+   797                                  ; ----------------------------
+   798                                  ; -- Forth Note - String Primitives
+   799                                  ; ----------------------------
+   800                                  ; These primitives provide basic string handling: `count` accesses strings
+   801                                  ; by address and length, while `>number` parses numeric input from text,
+   802                                  ; supporting input conversion and numeric operations in Forth programs.
+   803                                  
+   804                                  ; -----------------------
+   805                                  ; -- Assembly Note - count
+   806                                  ; -----------------------
+   807                                  ; `count` increments BX, pushes it on the stack, and loads the string
+   808                                  ; length into BL/BH registers. Ends with `jmp next` to continue execution.
+   809                                  
+   810                                  ; -----------------------
+   811                                  ; -- Forth Note - count
+   812                                  ; -----------------------
+   813                                  ; Provides the address and length of a counted string. Used for reading
+   814                                  ; words or tokens from the input buffer for further processing.
+   815                                  
+   816                                                                          ; count
+   817 00000138 [2801]                  lfa_count:          dw lfa_exit
+   818 0000013A 05636F756E74            nfa_count:          db 5,'count'
+   819 00000140 [4201]                  cfa_count:          dw $+2
+   820                                  
+   821 00000142 43                                          inc bx
+   822 00000143 53                                          push bx
+   823 00000144 8A5FFF                                      mov bl,byte[bx-1]
+   824 00000147 B700                                        mov bh,0
+   825 00000149 EBA4                                        jmp next
+   826                                  
+   827                                  ; -----------------------
+   828                                  ; -- Assembly Note - >number
+   829                                  ; -----------------------
+   830                                  ; `>number` converts a sequence of characters at DI into a numeric value,
+   831                                  ; updating AX/CX/DX and the parameter stack. Implements numeric parsing
+   832                                  ; directly in assembly. Ends with `jmp next`.
+   833                                  
+   834                                  ; -----------------------
+   835                                  ; -- Forth Note - >number
+   836                                  ; -----------------------
+   837                                  ; Converts a string of digits into a number and pushes it on the stack.
+   838                                  ; Supports decimal input and integrates with standard Forth numeric words.
+   839                                  
+   840                                                                          ; to_number [>number]
+   841 0000014B [3801]                  lfa_to_number:      dw lfa_count
+   842 0000014D 073E6E756D626572        nfa_to_number:      db 7,'>number'
+   843 00000155 [5701]                  cfa_to_number:      dw $+2
+   844                                  
+   845 00000157 5F                                          pop di
+   846 00000158 59                                          pop cx
+   847 00000159 58                                          pop ax
+   848 0000015A 85DB                    to_numl:            test bx,bx
+   849 0000015C 7433                                        je to_numz
+   850 0000015E 50                                          push ax
+   851 0000015F 8A05                                        mov al,byte[di]
+   852 00000161 3C61                                        cmp al,'a'
+   853 00000163 7202                                        jc to_nums
+   854 00000165 2C20                                        sub al,32
+   855 00000167 3C3A                    to_nums:            cmp al,'9'+1
+   856 00000169 7206                                        jc to_numg
+   857 0000016B 3C41                                        cmp al,'A'
+   858 0000016D 7223                                        jc to_numh
+   859 0000016F 2C07                                        sub al,7
+   860 00000171 2C30                    to_numg:            sub al,48
+   861 00000173 B400                                        mov ah,0
+   862 00000175 3A06[3500]                                  cmp al,byte[dfa_base]
+   863 00000179 7317                                        jnc to_numh
+   864 0000017B 92                                          xchg ax,dx
+   865 0000017C 58                                          pop ax
+   866 0000017D 52                                          push dx
+   867 0000017E 91                                          xchg ax,cx
+   868 0000017F F726[3500]                                  mul word[dfa_base]
+   869 00000183 91                                          xchg ax,cx
+   870 00000184 F726[3500]                                  mul word[dfa_base]
+   871 00000188 01D1                                        add cx,dx
+   872 0000018A 5A                                          pop dx
+   873 0000018B 01D0                                        add ax,dx
+   874 0000018D 4B                                          dec bx
+   875 0000018E 47                                          inc di
+   876 0000018F EBC9                                        jmp to_numl
+   877 00000191 50                      to_numz:            push ax
+   878 00000192 51                      to_numh:            push cx
+   879 00000193 57                                          push di
+   880 00000194 E958FF                                      jmp next
+   881                                  
+   882                                  ; ---------
+   883                                  ; -- Dictionary words: accept, word, emit
+   884                                  ; -- Terminal I/O Primitives
+   885                                  ; -----------------------
+   886                                  
+   887                                  ; ------------------------------
+   888                                  ; -- Assembly Note - Terminal I/O Primitives
+   889                                  ; ------------------------------
+   890                                  ; The terminal I/O primitives are implemented in straight x86 assembly.
+   891                                  ; `accept` reads a line of characters from input, handles backspaces,
+   892                                  ; updates the buffer pointer (>in) and character count (#tib), and echoes
+   893                                  ; characters to the terminal. `word` extracts a token from the input buffer,
+   894                                  ; copying it to dictionary space and terminating with a space. `emit` writes
+   895                                  ; a character from the stack to the terminal via `outchar`. Each primitive
+   896                                  ; ends with `jmp next` to continue the inner interpreter loop.
+   897                                  
+   898                                  ; ------------------------------
+   899                                  ; -- Forth Note - Terminal I/O Primitives
+   900                                  ; ------------------------------
+   901                                  ; These primitives provide the Forth environment with basic interaction
+   902                                  ; facilities. `accept` allows user input for programs, `word` tokenizes
+   903                                  ; input for interpretation or compilation, and `emit` outputs characters.
+   904                                  ; Together, they enable reading, parsing, and writing text in Forth programs,
+   905                                  ; forming the foundation for interactive use.
+   906                                  
+   907                                  ; ------------------------------
+   908                                  ; -- Assembly Note - accept
+   909                                  ; ------------------------------
+   910                                  ; Implements the `accept` primitive in straight x86 assembly. It reads a
+   911                                  ; line of input from the user, handles backspace, updates the input buffer
+   912                                  ; pointer (>in) and character count (#tib), and echoes typed characters.
+   913                                  ; Control characters like carriage return and bell are processed correctly.
+   914                                  ; Ends with `jmp next` to return to the inner interpreter loop.
+   915                                  
+   916                                  ; ------------------------------
+   917                                  ; -- Forth Note - accept
+   918                                  ; ------------------------------
+   919                                  ; `accept` reads a line of text into the input buffer for further processing.
+   920                                  ; It updates the buffer pointer (>in) and character count (#tib). Programs
+   921                                  ; and the outer interpreter rely on it to fetch user input for interpretation
+   922                                  ; or compilation.
+   923                                  
+   924                                                                          ; accept
+   925 00000197 [4B01]                  lfa_accept:         dw lfa_to_number
+   926 00000199 06616363657074          nfa_accept:         db 6,'accept'
+   927 000001A0 [A201]                  cfa_accept:         dw $+2
+   928                                  
+   929 000001A2 5F                                          pop di
+   930 000001A3 31C9                                        xor cx,cx
+   931 000001A5 E89E00                  acceptl:            call getchar
+   932 000001A8 3C08                                        cmp al,8
+   933 000001AA 7513                                        jne acceptn
+   934 000001AC E319                                        jcxz acceptb
+   935 000001AE E89C00                                      call outchar
+   936 000001B1 B020                                        mov al,' '
+   937 000001B3 E89700                                      call outchar
+   938 000001B6 B008                                        mov al,8
+   939 000001B8 E89200                                      call outchar
+   940 000001BB 49                                          dec cx
+   941 000001BC 4F                                          dec di
+   942 000001BD EBE6                                        jmp acceptl
+   943 000001BF 3C0D                    acceptn:            cmp al,13
+   944 000001C1 7412                                        je acceptz
+   945 000001C3 39D9                                        cmp cx,bx
+   946 000001C5 7507                                        jne accepts
+   947 000001C7 B007                    acceptb:            mov al,7
+   948 000001C9 E88100                                      call outchar
+   949 000001CC EBD7                                        jmp acceptl
+   950 000001CE AA                      accepts:            stosb
+   951 000001CF 41                                          inc cx
+   952 000001D0 E87A00                                      call outchar
+   953 000001D3 EBD0                                        jmp acceptl
+   954 000001D5 E3F0                    acceptz:            jcxz acceptb
+   955 000001D7 B00D                                        mov al,13
+   956 000001D9 E87100                                      call outchar
+   957 000001DC B00A                                        mov al,10
+   958 000001DE E86C00                                      call outchar
+   959 000001E1 89CB                                        mov bx,cx
+   960 000001E3 E909FF                                      jmp next
+   961                                  
+   962                                  ; ------------------------------
+   963                                  ; -- Assembly Note - word
+   964                                  ; ------------------------------
+   965                                  ; `word` is implemented entirely in x86 assembly. It scans the input
+   966                                  ; buffer starting at `>in` in the terminal input area, copies characters
+   967                                  ; up to a delimiter into the dictionary at `dp`, and updates `>in` to
+   968                                  ; point past the consumed input. Ends with `jmp next` to return control
+   969                                  ; to the inner interpreter.
+   970                                  
+   971                                  ; ------------------------------
+   972                                  ; -- Forth Note - word
+   973                                  ; ------------------------------
+   974                                  ; This primitive reads the next space-delimited token from the input
+   975                                  ; buffer. Forth programs use it to parse words for interpretation or
+   976                                  ; compilation. It handles buffer management and updates `>in`, making
+   977                                  ; subsequent primitives aware of the current input position.
+   978                                  
+   979                                                                          ; word
+   980 000001E6 [9701]                  lfa_word:           dw lfa_accept
+   981 000001E8 04776F7264              nfa_word:           db 4,'word'
+   982 000001ED [EF01]                  cfa_word:           dw $+2
+   983                                  
+   984 000001EF 8B3E[2A00]                                  mov di,word[dfa_dp]
+   985 000001F3 57                                          push di
+   986 000001F4 89DA                                        mov dx,bx
+   987 000001F6 8B1E[4A00]                                  mov bx,word[dfa_tib]
+   988 000001FA 89D9                                        mov cx,bx
+   989 000001FC 031E[1600]                                  add bx,word[dfa_to_in]
+   990 00000200 030E[2100]                                  add cx,word[dfa_ntib]
+   991 00000204 39D9                    wordf:              cmp cx,bx
+   992 00000206 7415                                        je wordz
+   993 00000208 8A07                                        mov al,byte[bx]
+   994 0000020A 43                                          inc bx
+   995 0000020B 38D0                                        cmp al,dl
+   996 0000020D 74F5                                        je wordf
+   997 0000020F 47                      wordc:              inc di
+   998 00000210 8805                                        mov byte[di],al
+   999 00000212 39D9                                        cmp cx,bx
+  1000 00000214 7407                                        je wordz
+  1001 00000216 8A07                                        mov al,byte[bx]
+  1002 00000218 43                                          inc bx
+  1003 00000219 38D0                                        cmp al,dl
+  1004 0000021B 75F2                                        jne wordc
+  1005 0000021D C6450120                wordz:              mov byte[di+1],32
+  1006 00000221 A1[2A00]                                    mov ax,word[dfa_dp]
+  1007 00000224 97                                          xchg ax,di
+  1008 00000225 29F8                                        sub ax,di
+  1009 00000227 8805                                        mov byte[di],al
+  1010 00000229 2B1E[4A00]                                  sub bx,word[dfa_tib]
+  1011 0000022D 891E[1600]                                  mov word[dfa_to_in],bx
+  1012 00000231 5B                                          pop bx
+  1013 00000232 E9BAFE                                      jmp next
+  1014                                  
+  1015                                  ; ------------------------------
+  1016                                  ; -- Assembly Note - emit
+  1017                                  ; ------------------------------
+  1018                                  ; `emit` swaps AX/BX to place the character in AL, then calls DOS
+  1019                                  ; interrupt 21h function 2 to write the character to the standard
+  1020                                  ; output. Returns to the inner interpreter with `jmp next`. Uses
+  1021                                  ; `getchar` and `outchar` as low-level I/O helpers.
+  1022                                  
+  1023                                  ; ------------------------------
+  1024                                  ; -- Forth Note - emit
+  1025                                  ; ------------------------------
+  1026                                  ; Outputs a single character from the parameter stack to the
+  1027                                  ; terminal. Forth programs call `emit` to display characters or
+  1028                                  ; produce text output; it operates on the top of the parameter stack.
+  1029                                  
+  1030                                                                          ; emit
+  1031 00000235 [E601]                  lfa_emit:           dw lfa_word
+  1032 00000237 04656D6974              nfa_emit:           db 4,'emit'
+  1033 0000023C [3E02]                  cfa_emit:           dw $+2
+  1034                                  
+  1035 0000023E 93                                          xchg ax,bx
+  1036 0000023F E80B00                                      call outchar
+  1037 00000242 5B                                          pop bx
+  1038 00000243 E9A9FE                                      jmp next
+  1039                                  
+  1040 00000246 B407                    getchar:            mov ah,7
+  1041 00000248 CD21                                        int 021h
+  1042 0000024A B400                                        mov ah,0
+  1043 0000024C C3                                          ret
+  1044                                  
+  1045 0000024D 92                      outchar:            xchg ax,dx
+  1046 0000024E B402                                        mov ah,2
+  1047 00000250 CD21                                        int 021h
+  1048 00000252 C3                                          ret
+  1049                                  
+  1050                                  ; ---------
+  1051                                  ; -- Dictionary word: find
+  1052                                  ; -- Search Primitive
+  1053                                  ; -----------------------
+  1054                                  
+  1055                                  ; ------------------------------
+  1056                                  ; -- Assembly Note - find
+  1057                                  ; ------------------------------
+  1058                                  ; Implements dictionary search for a given name. Traverses linked
+  1059                                  ; headers starting at last, compares characters case-insensitively,
+  1060                                  ; sets BX to indicate success (1) or failure (0). On success, DI points
+  1061                                  ; to the word’s CFA. Returns to next for further execution.
+  1062                                  
+  1063                                  ; ------------------------------
+  1064                                  ; -- Forth Note - find
+  1065                                  ; ------------------------------
+  1066                                  ; `find` is a Forth word that searches the dictionary for a given name.
+  1067                                  ; When called by the outer interpreter, it determines whether input
+  1068                                  ; matches an existing definition. On success, the word can be executed
+  1069                                  ; or compiled; on failure, the search result signals undefined input.
+  1070                                  
+  1071                                                                          ; find
+  1072 00000253 [3502]                  lfa_find:           dw lfa_emit
+  1073 00000255 0466696E64              nfa_find:           db 4,'find'
+  1074 0000025A [5C02]                  cfa_find:           dw $+2
+  1075                                  
+  1076 0000025C BF[4000]                                    mov di,dfa_last
+  1077 0000025F 57                      findl:              push di
+  1078 00000260 53                                          push bx
+  1079 00000261 8A0F                                        mov cl,byte[bx]
+  1080 00000263 B500                                        mov ch,0
+  1081 00000265 41                                          inc cx
+  1082 00000266 8A4502                  findc:              mov al,byte[di+2]
+  1083 00000269 247F                                        and al,07Fh
+  1084 0000026B 3A07                                        cmp al,byte[bx]
+  1085 0000026D 740E                                        je findm
+  1086 0000026F 5B                                          pop bx
+  1087 00000270 5F                                          pop di
+  1088 00000271 8B3D                                        mov di,word[di]
+  1089 00000273 85FF                                        test di,di
+  1090 00000275 75E8                                        jne findl
+  1091 00000277 53                      findnf:             push bx
+  1092 00000278 31DB                                        xor bx,bx
+  1093 0000027A E972FE                                      jmp next
+  1094 0000027D 47                      findm:              inc di
+  1095 0000027E 43                                          inc bx
+  1096 0000027F E2E5                                        loop findc
+  1097 00000281 5B                                          pop bx
+  1098 00000282 5F                                          pop di
+  1099 00000283 BB0100                                      mov bx,1
+  1100 00000286 47                                          inc di
+  1101 00000287 47                                          inc di
+  1102 00000288 8A05                                        mov al,byte[di]
+  1103 0000028A A880                                        test al,080h
+  1104 0000028C 7502                                        jne findi
+  1105 0000028E F7DB                                        neg bx
+  1106 00000290 83E01F                  findi:              and ax,31
+  1107 00000293 01C7                                        add di,ax
+  1108 00000295 47                                          inc di
+  1109 00000296 57                                          push di
+  1110 00000297 E955FE                                      jmp next
+  1111                                  
+  1112                                  ; ------------------------------
+  1113                                  ; -- Forth Note - Complete Word Chain (Pre-Outer Interpreter)
+  1114                                  ; ------------------------------
+  1115                                  ; The dictionary now contains the head, core variables, and all
+  1116                                  ; implemented primitives, including flow control, string, and
+  1117                                  ; terminal I/O words. The inner interpreter (`next`) is fully
+  1118                                  ; available, allowing these words to execute via their code field
+  1119                                  ; addresses (cfa):
+  1120                                  ;
+  1121                                  ;   0 <- state <- to_in [>in] <- ntib [#tib] <- dp <- base <- last <- tib
+  1122                                  ;   <- abort <- comma [,] <- lit <- rot <- drop <- dup <- swap <- plus [+]
+  1123                                  ;   <- equals [=] <- fetch [@] <- store [!]
+  1124                                  ;   <- zero_branch [0branch] <- branch <- execute <- exit <- count
+  1125                                  ;   <- to_number [>number] <- accept <- word <- emit <- find
+  1126                                  ;
+  1127                                  ; Each entry links to the previous one, forming a complete dictionary
+  1128                                  ; chain that supports lookup, compilation, and execution of all
+  1129                                  ; primitives before the outer interpreter is fully active.
+  1130                                  
+  1131                                  ; -----------------------
+  1132                                  ; Colon Definitions
+  1133                                  ; -- Words for composing other forth words
+  1134                                  ; -----------------------
+  1135                                  
+  1136                                  ; ---------
+  1137                                  ; -- Dictionary words: colon [:] (colon word), semicolon [;] (colon word)
+  1138                                  ; -- Composition Delimiters - user facing
+  1139                                  ; ---------
+  1140                                  
+  1141                                                                          ; colon [:]
+  1142 0000029A [5302]                  lfa_colon:          dw lfa_find
+  1143 0000029C 013A                    nfa_colon:          db 1,':'
+  1144 0000029E [AC02]                  cfa_colon:          dw docolon
+  1145                                  
+  1146 000002A0 [8400]FFFF[0A00]-                           dw cfa_lit,-1,cfa_state,cfa_store,cfa_create
+  1146 000002A6 [E800][D602]       
+  1147 000002AA [0D03]                                      dw cfa_semicode
+  1148 000002AC 4D                      docolon:            dec bp
+  1149 000002AD 4D                                          dec bp
+  1150 000002AE 897600                                      mov word[bp],si
+  1151 000002B1 8D7502                                      lea si,[di+2]
+  1152 000002B4 E938FE                                      jmp next
+  1153                                  
+  1154                                                                          ; semicolon [;]
+  1155 000002B7 [9A02]                  lfa_semicolon:      dw lfa_colon
+  1156 000002B9 813B                    nfa_semicolon:      db 080H+1,';'       ; immediate+name len+string
+  1157 000002BB [AC02]                  cfa_semicolon:      dw docolon
+  1158                                  
+  1159 000002BD [8400][2F01][6F00]-                         dw cfa_lit,cfa_exit,cfa_comma,cfa_lit,0,cfa_state
+  1159 000002C3 [8400]0000[0A00]   
+  1160 000002C9 [E800][2F01]                                dw cfa_store,cfa_exit
+  1161                                  
+  1162                                  ; ---------
+  1163                                  ; -- Dictionary words: create (colon word), semicode [(;code)] (primitive)
+  1164                                  ; -- Low-level Composition functions
+  1165                                  ; ---------
+  1166                                  ; These primitives support the implementation of colon definitions and other
+  1167                                  ; composed words. While they can be invoked directly, they are intended for
+  1168                                  ; internal use, enabling the creation of new dictionary entries and execution
+  1169                                  ; of arbitrary code sequences.
+  1170                                  
+  1171                                                                          ; create
+  1172 000002CD [B702]                  lfa_create:         dw lfa_semicolon
+  1173 000002CF 06637265617465          nfa_create:         db 6,'create'
+  1174 000002D6 [AC02]                  cfa_create:         dw docolon
+  1175                                  
+  1176 000002D8 [2800][DE00][3E00]-                         dw cfa_dp,cfa_fetch,cfa_last,cfa_fetch,cfa_comma
+  1176 000002DE [DE00][6F00]       
+  1177 000002E2 [3E00][E800][8400]-                         dw cfa_last,cfa_store,cfa_lit,32,cfa_word,cfa_count
+  1177 000002E8 2000[ED01][4001]   
+  1178 000002EE [C300][2800][E800]-                         dw cfa_plus,cfa_dp,cfa_store,cfa_lit,0,cfa_comma
+  1178 000002F4 [8400]0000[6F00]   
+  1179 000002FA [0D03]                                      dw cfa_semicode
+  1180 000002FC 53                      dovar:              push bx
+  1181 000002FD 8D5D02                                      lea bx,[di+2]
+  1182 00000300 E9ECFD                                      jmp next
+  1183                                  
+  1184                                                                              ; semicode [(;code)]
+  1185 00000303 [CD02]                  lfa_semicode:       dw lfa_create
+  1186 00000305 07283B636F646529        nfa_semicode:       db 7,'(;code)'
+  1187 0000030D [0F03]                  cfa_semicode:       dw $+2
+  1188                                  
+  1189 0000030F 8B3E[4000]                                  mov di,word[dfa_last]
+  1190 00000313 8A4502                                      mov al,byte[di+2]
+  1191 00000316 83E01F                                      and ax,31
+  1192 00000319 01C7                                        add di,ax
+  1193 0000031B 897503                                      mov word[di+3],si
+  1194 0000031E 8B7600                                      mov si,word[bp]
+  1195 00000321 45                                          inc bp
+  1196 00000322 45                                          inc bp
+  1197 00000323 E9C9FD                                      jmp next
+  1198                                  
+  1199                                  ; ---------
+  1200                                  ; -- Dictionary word: constant (colon word)
+  1201                                  ; -- Constant Definition
+  1202                                  ; ---------
+  1203                                  ; Defines a dictionary entry representing a constant value.
+  1204                                  
+  1205                                                                          ; constant
+  1206 00000326 [0303]                  lfa_constant:       dw lfa_semicode
+  1207 00000328 08636F6E7374616E74      nfa_constant:       db 8,'constant'
+  1208 00000331 [AC02]                  cfa_constant:       dw docolon
+  1209                                  
+  1210 00000333 [D602][6F00][0D03]                          dw cfa_create,cfa_comma,cfa_semicode
+  1211 00000339 53                      doconst:            push bx
+  1212 0000033A 8B5D02                                      mov bx,word[di+2]
+  1213 0000033D E9AFFD                                      jmp next
+  1214                                  
+  1215                                  ; -------------------------------------
+  1216                                  ; -- Outer Interpreter (interpret)
+  1217                                  ; -- Core Forth REPL (Process Input, Execute Words, Handle Control Flow)
+  1218                                  ; -------------------------------------
+  1219                                  ; The outer interpreter is implemented as an ordinary Forth word whose cfa is the first
+  1220                                  ; executed when the system starts. si is preloaded with cfa_interpret+2, and control jumps
+  1221                                  ; to next, which begins executing the threaded code of interpret just like any other word.
+  1222                                  ; interpret reads input, parses words, manages state (compile vs interpret), and dispatches
+  1223                                  ; execution through next. It drives the interactive Forth environment.
+  1224                                  
+  1225                                  ; ---------
+  1226                                  ; -- Dictionary Word: interpret (Colon word)
+  1227                                  ; -- Implements the Outer Interpreter
+  1228                                  ; ---------
+  1229                                  
+  1230                                  final:                                  ; start of the last word's dictionary header
+  1231                                  
+  1232                                                                          ; interpret
+  1233 00000340 [2603]                  lfa_interpret:      dw lfa_constant
+  1234 00000342 09696E746572707265-     nfa_interpret:      db 9,'interpret'
+  1234 0000034B 74                 
+  1235 0000034C [AC02]                  cfa_interpret:      dw docolon
+  1236                                  
+  1237                                  ; ---------
+  1238                                  ; Outer Interpreter Thread: interpt (interpreter)
+  1239                                  ;
+  1240                                  ; Entry point of the outer interpreter.
+  1241                                  ; Reads input into the buffer, sets #tib to the number of characters read,
+  1242                                  ; and initializes >in for parsing. Prepares the system to scan and interpret words.
+  1243                                  ; ---------
+  1244                                  interpt:            
+  1245                                                      ; Fetch the value of the input buffer length and
+  1246                                                      ; the current position index within it.
+  1247 0000034E [1F00][DE00][1400]-                         dw cfa_ntib,cfa_fetch,cfa_to_in,cfa_fetch
+  1247 00000354 [DE00]             
+  1248                                  
+  1249                                                      ; Compare the input buffer length with the current index
+  1250                                                      ; If they are not equal, more text remains to be processed
+  1251                                                      ; go get it
+  1252 00000356 [CE00][FD00][7003]-                         dw cfa_equals,cfa_zero_branch,intpar,cfa_tib
+  1252 0000035C [4800]             
+  1253                                  
+  1254                                                      ; Push 50 onto the stack to tell accept to read up to 50 characters.
+  1255                                                      ; Store the actual number of characters read into #tib.
+  1256 0000035E [8400]3200[A001]-                           dw cfa_lit,50,cfa_accept,cfa_ntib,cfa_store
+  1256 00000364 [1F00][E800]       
+  1257                                  
+  1258                                                      ; Reset >in to 0 to start reading from the beginning of the input buffer.
+  1259 00000368 [8400]0000[1400]-                           dw cfa_lit,0,cfa_to_in,cfa_store
+  1259 0000036E [E800]             
+  1260                                  
+  1261                                  ; ---------
+  1262                                  ; Parser and immediate word handler: intpar (parser)
+  1263                                  ;
+  1264                                  ; This code handles scanning the input buffer for the next word,
+  1265                                  ; checks if it exists in the dictionary, determines whether it is
+  1266                                  ; immediate, and executes it or compiles its CFA.
+  1267                                  ; ---------
+  1268                                  intpar:
+  1269                                                      ; Push a space (ascii 32) onto the stack as delimiter.
+  1270                                                      ; Use the word primitive to scan the input buffer up to that character.
+  1271                                                      ; After parsing a string, use find to see if it matches a dictionary entry.
+  1272                                                      ; Duplicate the result flag for further processing.
+  1273 00000370 [8400]2000[ED01]-                           dw cfa_lit,32,cfa_word,cfa_find,cfa_dup
+  1273 00000376 [5A02][AC00]       
+  1274                                  
+  1275                                                      ; If the flag from 'find' is zero, the string doesn't match any defined word.
+  1276                                                      ; Otherwise, we have a word match - fetch the interpreter state (interpret/compile)
+  1277                                                      ; to see whether to interpret or compile it.
+  1278 0000037A [FD00][9403][0A00]-                         dw cfa_zero_branch,intnf,cfa_state,cfa_fetch
+  1278 00000380 [DE00]             
+  1279                                  
+  1280                                                      ; If the found word is immediate jump to execute it; 
+  1281                                                      ; otherwise, compile its CFA into the dictionary.
+  1282 00000382 [CE00][FD00][8E03]-                         dw cfa_equals,cfa_zero_branch,intexc,cfa_comma
+  1282 00000388 [6F00]             
+  1283                                  
+  1284                                                      ; and jump to the end of the interpreter loop, skipping any remaining 
+  1285                                                      ; checks or compilation steps.
+  1286 0000038A [1101][CE03]                                dw cfa_branch,intdone
+  1287                                  
+  1288                                  ; ---------
+  1289                                  ; Immediate word executor: intexc (execute immediate)
+  1290                                  ;
+  1291                                  ; This code handles the case when a word is marked as immediate.
+  1292                                  ; It executes the word’s CFA right away, bypassing compilation,
+  1293                                  ; and then jumps to the end of the interpreter loop.
+  1294                                  ; ---------
+  1295                                  intexc:
+  1296                                                      ; Execute its CFA immediately, then skip the remaining
+  1297                                                      ; interpreter steps and jump to the end of the loop.
+  1298 0000038E [2101][1101][CE03]                          dw cfa_execute,cfa_branch,intdone
+  1299                                  
+  1300                                  ; ---------
+  1301                                  ; Number parsing and compilation handling: intnf (not found / number check)
+  1302                                  ;
+  1303                                  ; This code handles the case where the scanned string is not a dictionary word.
+  1304                                  ; It prepares for >number conversion by duplicating and rotating the string,
+  1305                                  ; splits the counted string into length and text, and attempts numeric conversion.
+  1306                                  ;
+  1307                                  ; If the conversion succeeds, control jumps to continue processing (intskip).
+  1308                                  ; If it fails, the code checks whether we are interpreting or compiling.
+  1309                                  ; For compilation, it manages the LFA of the current word and restores
+  1310                                  ; the previous 'last' word in the dictionary to maintain dictionary consistency.
+  1311                                  ; ---------
+  1312                                  
+  1313                                  intnf:
+  1314                                                      ; It wasn't a word, is it as a number?
+  1315                                                      ; Duplicate and rotate the string, split length from text,
+  1316                                                      ; and call >number for conversion.
+  1317 00000394 [AC00][9100][4001]-                         dw cfa_dup,cfa_rot,cfa_count,cfa_to_number
+  1317 0000039A [5501]             
+  1318                                  
+  1319                                                      ; If >number succeeded (0 from 0branch), continue.
+  1320                                                      ; Otherwise, check interpreter state to handle conversion error.
+  1321 0000039C [FD00][BA03][0A00]-                         dw cfa_zero_branch,intskip,cfa_state,cfa_fetch
+  1321 000003A2 [DE00]             
+  1322                                  
+  1323                                                      ; if state is 0, we're intrepreting, jump directly
+  1324                                                      ; to the conversion error handler, otherwise get the
+  1325                                                      ; lfa of the word we were trying to compile and set
+  1326                                                      ; aside a copy of it
+  1327 000003A4 [FD00][B803][3E00]-                         dw cfa_zero_branch,intnc,cfa_last,cfa_fetch,cfa_dup
+  1327 000003AA [DE00][AC00]       
+  1328                                  
+  1329                                                      ; then restore the dictionary pointer to point to the end of the word we just compiled,
+  1330                                                      ; ensuring the dictionary remains consistent for subsequent words
+  1331 000003AE [DE00][3E00][E800]-                         dw cfa_fetch,cfa_last,cfa_store,cfa_dp,cfa_store
+  1331 000003B4 [2800][E800]       
+  1332                                  
+  1333                                  ; ---------
+  1334                                  ; Number Conversion Error Handler: intnc (conversion failure)
+  1335                                  ;
+  1336                                  ; This code is reached whenever a numeric conversion fails, regardless
+  1337                                  ; of whether the system is in interpretation or compilation mode.
+  1338                                  ; It calls the abort routine to reset the interpreter state and ensure
+  1339                                  ; the system remains consistent.
+  1340                                  ; ---------
+  1341                                  intnc:
+  1342                                                      ; Handle failed numeric conversion: reset the system by calling abort.
+  1343 000003B8 [5400]                                      dw cfa_abort
+  1344                                  
+  1345                                  ; ---------
+  1346                                  ; Post-Number Conversion Handler: intskip (successful conversion)
+  1347                                  ;
+  1348                                  ; This code handles the stack cleanup and compilation after a successful
+  1349                                  ; numeric conversion. It drops the temporary values returned by >number,
+  1350                                  ; leaving the converted single-precision number on the stack.
+  1351                                  ; If interpreting, it jumps to continue processing.
+  1352                                  ; If compiling, it encodes the literal by storing its CFA and the number
+  1353                                  ; into the dictionary for later execution.
+  1354                                  ; ---------
+  1355                                  intskip:
+  1356                                                      ; Success, drop the temporary address and high word from >number
+  1357                                                      ; leave the converted number on the stack
+  1358                                                      ; check interpreter state to decide next action.
+  1359 000003BA [A100][A100][0A00]-                         dw cfa_drop, cfa_drop, cfa_state, cfa_fetch
+  1359 000003C0 [DE00]             
+  1360                                  
+  1361                                                      ; If interpreting, jump to continue. Otherwise, encode the literal into the dictionary.  
+  1362 000003C2 [FD00][CE03][8400]-                         dw cfa_zero_branch,intdone,cfa_lit,cfa_lit,cfa_comma  
+  1362 000003C8 [8400][6F00]       
+  1363                                  
+  1364                                                      ; Store the converted number into the current word in the dictionary.  
+  1365 000003CC [6F00]                                      dw cfa_comma
+  1366                                  
+  1367                                  ; ---------
+  1368                                  ; Interpreter Loop Continuation: intdone
+  1369                                  ;
+  1370                                  ; This word marks the end of a single iteration of the outer interpreter.
+  1371                                  ; It unconditionally jumps back to interpt to fetch and process the next word
+  1372                                  ; from the input buffer, continuing the REPL loop.
+  1373                                  ; ---------
+  1374                                  intdone:
+  1375                                                      ; Jump back to the start of the outer interpreter loop.
+  1376 000003CE [1101][4E03]                                dw cfa_branch,interpt
+  1377                                  
+  1378                                  ; ------------------------------
+  1379                                  ; -- Forth Note - Final Word Chain
+  1380                                  ; ------------------------------
+  1381                                  ; The dictionary now includes all core variables, primitives, and
+  1382                                  ; high-level words, completing the Forth environment for execution:
+  1383                                  ;
+  1384                                  ;   0 <- state <- to_in [>in] <- ntib [#tib] <- dp <- base <- last <- tib
+  1385                                  ;   <- abort <- comma [,] <- lit <- rot <- drop <- dup <- swap <- plus [+]
+  1386                                  ;   <- equals [=] <- fetch [@] <- store [!]
+  1387                                  ;   <- zero_branch [0branch] <- branch <- execute <- exit <- count
+  1388                                  ;   <- to_number [>number] <- accept <- word <- emit <- find
+  1389                                  ;   <- colon [:] <- semicolon [;] <- create [(;code)] <- constant
+  1390                                  ;   <- interpret
+  1391                                  ;
+  1392                                  ; With the outer interpreter now defined, this final chain fully supports
+  1393                                  ; lookup, compilation, execution, and runtime extension of all Forth words.
+  1394                                  
+  1395                                  
+  1396                                  freemem:
+  1397                                  
+  1398                                  
