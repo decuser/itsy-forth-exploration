@@ -1,0 +1,30 @@
+add         ; reg, reg / reg, mem / reg, imm
+and         ; reg, imm / reg, mem
+call        ; call label
+cmp         ; reg, imm / reg, mem
+dec         ; reg
+inc         ; reg
+int         ; interrupt
+jc          ; jump if carry
+jcxz        ; jump if cx=0
+je          ; jump if equal
+jmp         ; unconditional / indirect
+jnc         ; jump if not carry
+jne         ; jump if not equal
+lea         ; load effective address
+lodsw       ; load string word
+loop        ; loop with cx decrement
+mov         ; reg, reg / reg, mem / mem, reg / reg, imm
+mul         ; reg*mem -> AX
+neg         ; reg
+pop         ; reg / mem
+push        ; reg
+ret         ; return
+sbb         ; reg, reg
+stosb       ; store string byte
+stosw       ; store string word
+sub         ; reg, reg / reg, mem / reg, imm
+test        ; reg, reg / reg, imm
+xchg        ; reg, reg
+xor         ; reg, reg
+
