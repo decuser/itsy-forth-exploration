@@ -4,10 +4,10 @@
 ; Itsy is a classical, indirect-threaded Forth interpreter for 16-bit DOS.
 ; It implements a single flat memory model where code and data coexist. The
 ; system is centered on a dictionary of linked entries, each holding a name,
-; flags, a code field, and optional data. Execution is driven by two loops:
-;   - Outer interpreter: parses input, searches the dictionary, and manages
+; flags, a code field, and optional data. Execution is driven by two interpreters:
+;   - Text interpreter: parses input, searches the dictionary, and manages
 ;     compilation versus immediate execution.
-;   - Inner interpreter: dispatches words by fetching their code field
+;   - Address interpreter (address): dispatches words by fetching their code field
 ;     addresses and jumping indirectly, forming the core of the threading
 ;     model.
 ;
@@ -19,7 +19,7 @@
 ; detailed below.
 ; ==========================================================================
 
-; ==========================================================================
+;; ==========================================================================
 ; Itsy 16-bit DOS COM Forth - Architecture, Dictionary, and Core Routines
 ; --------------------------------------------------------------------------
 ; -----------------------
@@ -37,14 +37,14 @@
 ; Each entry in the dictionary represents a Forth word: a variable,
 ; constant, primitive, or colon definition. Words are self-describing
 ; and contain four main fields:
-;   LFA - pointer to the previous dictionary entry
-;   NFA - pointer to the word’s name string
-;   CFA - pointer to executable code (primitive or colon handler)
-;   DFA - pointer to associated data or value (if applicable)
+;   LFA - link field address, pointer to the previous dictionary entry
+;   NFA - name field address, pointer to the word’s name string
+;   CFA - code field address, pointer to executable code (primitive or colon handler)
+;   DFA - data field address, pointer to associated data or value (if applicable)
 ;
 ; Colon definitions store a sequence of CFA addresses forming threaded
 ; code. Primitives, variables, and constants each have short handlers
-; that execute their behavior and then return to the inner interpreter.
+; that execute their behavior and then return to the address interpreter.
 ; This structure allows traversal, execution, and runtime modification
 ; of the dictionary.
 
@@ -59,9 +59,9 @@
 ;   (;code) constant  interpret
 
 ; -----------------------
-; Inner Interpreter
+; Address Interpreter (next)
 ; -----------------------
-; Execution passes through a single inner interpreter loop labeled `next`.
+; Execution passes through a single address interpreter loop labeled `next`.
 ; This loop uses LODSW at SI to fetch the next code field, moves it to DI,
 ; and jumps indirectly via `jmp word[di]`. All words, primitive or colon-
 ; defined, are dispatched through this loop, defining the indirect threading
@@ -93,9 +93,9 @@
 ;     or values before returning to `next`.
 
 ; -----------------------
-; Outer Interpreter
+; Text Interpreter
 ; -----------------------
-; The outer interpreter reads input, tokenizes it with `word`, searches
+; The text interpreter reads input, tokenizes it with `word`, searches
 ; the dictionary via `find`, and either executes or compiles based on
 ; the current state stored in `state`. Memory is a single flat segment:
 ; the dictionary grows upward, stacks grow downward, matching the COM file
@@ -125,7 +125,7 @@
 ;   docolon   - execute a colon-defined word
 ;   dovar     - handle variable access
 ;   doconst   - handle constant access
-;   next      - inner interpreter loop
+;   next      - address interpreter loop
 
 ;
 ; These components together form the complete Itsy Forth system.
@@ -141,7 +141,7 @@
 ; Sets the program entry point at 0100h for a DOS COM file.
 ; Immediately jumps to the code field of the 'abort' routine (CFA).
 ; This jump also serves to initialize the interpreter and memory state
-; before execution enters the main inner interpreter loop.
+; before execution enters the main address interpreter loop.
 
 ; -----------------------
 ; Forth Note
@@ -248,7 +248,7 @@ dfa_tib:            dw 32768
 ; code field (CFA) points to the assembly-language routine implementing
 ; the primitive, which is usually a jump two bytes ahead to the actual
 ; routine. The routines are straight assembly instructions and each
-; ends with `jmp next` to return control to the inner interpreter. The
+; ends with `jmp next` to return control to the address interpreter. The
 ; data field (DFA) is unused for primitives; it is used only for
 ; variables or constants. DP tracks free memory for dictionary entries.
 
@@ -256,9 +256,9 @@ dfa_tib:            dw 32768
 ; Forth Note
 ; -----------------------
 ; These primitives are foundational and somewhat special because they
-; can be defined before the inner interpreter loop exists. While they
+; can be defined before the address interpreter loop exists. While they
 ; ultimately rely on `next` for control transfer, their machine
-; routines themselves do not depend on the inner interpreter being
+; routines themselves do not depend on the address interpreter being
 ; fully established. They include stack operations (DUP, DROP, SWAP,
 ; ROT), arithmetic (+, =), memory access (@, !), flow control
 ; (BRANCH, 0BRANCH, EXIT), I/O (EMIT, ACCEPT), and mechanisms to
@@ -279,14 +279,14 @@ dfa_tib:            dw 32768
 ; header is formed with LFA pointing to the previous word, NFA holding
 ; the name, and CFA pointing two bytes ahead to the following assembly
 ; implementation. The routine itself initializes core interpreter
-; state (state, >in, SP, SI) and jumps to the inner interpreter loop.
+; state (state, >in, SP, SI) and jumps to the address interpreter loop.
 
 ; -----------------------
 ; Forth Note
 ; -----------------------
 ; abort is a special primitive required to bootstrap the system.
 ; It sets up initial stack and interpreter state so subsequent Forth
-; words can execute. Though it precedes the fully defined inner
+; words can execute. Though it precedes the fully defined address
 ; interpreter, it relies on next to dispatch execution of other words.
 ; abort is also callable by Forth user programs to reset the interpreter
 ; state and exit a running definition safely.
@@ -302,7 +302,7 @@ cfa_abort:          dw $+2
                     mov word[dfa_state],bp      ; sets state to 0 (enter interpret mode)
                     mov sp,-256                 ; reserves a 256-byte stack from top of segment           
                     mov si,cfa_interpret+2      ; set si to interpreter code start
-                    jmp next                    ; jump to inner interpreter’s dispatch loop
+                    jmp next                    ; jump to address interpreter’s dispatch loop
 
 ; ---------
 ; -- Dictionary Words: comma [,] , lit
@@ -315,7 +315,7 @@ cfa_abort:          dw $+2
 ; `comma` builds a threaded code cell in the dictionary by storing
 ; the value in AX (swapped with BX) at the current dictionary pointer.
 ; The dictionary pointer is then updated, and execution returns to
-; the inner interpreter via `jmp next`.
+; the address interpreter via `jmp next`.
 
 ; -----------------------
 ; Forth Note
@@ -341,7 +341,7 @@ cfa_comma:          dw $+2
 ; -----------------------
 ; `lit` fetches the next word-sized literal from the dictionary using
 ; LODSW, pushes BX to preserve the top of the parameter stack, swaps AX/BX,
-; and returns to the inner interpreter via `jmp next`. This creates a
+; and returns to the address interpreter via `jmp next`. This creates a
 ; runtime literal for subsequent execution.
 
 ; -----------------------
@@ -374,7 +374,7 @@ cfa_lit:            dw $+2
 ; them, and pushes them back in rotated order. `drop` pops the top
 ; item. `dup` pushes a copy of the top item. `swap` exchanges the
 ; top two items. Each routine ends with `jmp next` to return to the
-; inner interpreter loop.
+; address interpreter loop.
 
 ; -----------------------
 ; -- Forth Note - stack primitives
@@ -388,7 +388,7 @@ cfa_lit:            dw $+2
 ; -----------------------
 ; Implements rot in straight x86 assembly: pops two values into
 ; registers, pushes them back in rotated order, then swaps AX/BX.
-; Ends with jmp next to continue inner interpreter dispatch.
+; Ends with jmp next to continue address interpreter dispatch.
 
 ; -----------------------
 ; -- Forth Note - rot
@@ -414,7 +414,7 @@ cfa_rot:            dw $+2
 ; -----------------------
 ; Implements `drop` by popping the top item off the parameter stack
 ; into BX, effectively discarding it. Ends with `jmp next` to resume
-; inner interpreter dispatch.
+; address interpreter dispatch.
 
 ; ---------------------
 ; -- Forth Note - drop
@@ -485,7 +485,7 @@ cfa_swap:           dw $+2
 ; sequences that operate directly on the parameter stack using AX and BX.
 ; Arithmetic words like `+` modify BX in place, while logic words like `=`
 ; perform comparisons and set BX to true (-1) or false (0). Each ends with
-; `jmp next` to return to the inner interpreter.
+; `jmp next` to return to the address interpreter.
 
 ; ----------------------------
 ; -- Forth Note - Math and Logic Primitives
@@ -610,22 +610,22 @@ cfa_store:          dw $+2
 ; -- Forth Note - Word Chain after Core Primitives
 ; ------------------------------
 ; The dictionary now includes the head, core variables, and the
-; foundational primitives required to bootstrap the inner interpreter:
+; foundational primitives required to bootstrap the address interpreter:
 ;
 ;   0 <- state <- to_in [>in] <- ntib [#tib] <- dp <- base <- last <- tib
 ;
 ; Each entry links to the previous one, forming a chain that supports
-; early lookup and compilation. This setup allows the inner interpreter
+; early lookup and compilation. This setup allows the address interpreter
 ; to begin executing once defined and provides the minimal environment
 ; for primitive operations.
 
 ; -------------------------------------
-; -- Inner Interpreter (next)
-; -- Forth Fetch-and-Execute Loop
+; -- Address Interpreter (next)
+; -- Executes compiled word addresses
 ; -------------------------------------
 
 ; --------------------------------------------------------------------
-; This is the classic indirect threaded Forth inner interpreter, called “next.”
+; This is the classic indirect threaded Forth address interpreter, called “next.”
 ; Each Forth word’s definition consists of a list of code field addresses (cfa).
 ; next repeatedly fetches the next cfa and executes the code it points to.
 ;
@@ -636,7 +636,7 @@ cfa_store:          dw $+2
 ;   si is initialized to cfa_interpret+2 and execution jumps to next.
 ;   This skips fetching interpret’s own cfa.
 ;   The first lodsw fetches the cfa of the first word in interpret’s thread
-;   and jumps to it, entering the interpreter loop directly.
+;   and jumps to it, entering the address interpreter loop directly.
 ;
 ; The next routine appears here among the word definitions because it is
 ; part of the runtime environment and is referenced like any other word.
@@ -650,21 +650,21 @@ next:               lodsw               ; load word at [si] into ax, increment s
 
 ; -------------------------------------
 ; -- Interpreter-Dependent Primitives
-; -- Require the inner interpreter to execute via cfa
+; -- Require the address interpreter to execute via cfa
 ; -------------------------------------
 
 ; ------------------------------
 ; -- Assembly Note - Interpreter-Dependent Primitives
 ; ------------------------------
 ; These primitives are implemented as standard threaded-code routines that
-; assume the inner interpreter is active. They use indirect jumps through
+; assume the address interpreter is active. They use indirect jumps through
 ; code field addresses to transfer control, relying on the interpreter’s
 ; fetch-and-dispatch loop rather than executing standalone machine code.
 
 ; ----------------------------
 ; -- Forth Note - Interpreter-Dependent Primitives
 ; ----------------------------
-; These words form part of the core runtime and require the inner interpreter
+; These words form part of the core runtime and require the address interpreter
 ; to be running. They rely on `next` to fetch and execute the code field
 ; addresses of subsequent words, integrating tightly with the interpreter’s
 ; control flow.
@@ -698,7 +698,7 @@ next:               lodsw               ; load word at [si] into ax, increment s
 ; -- Assembly Note - zero_branch
 ; ------------------------------
 ; Fetches a 16-bit offset from the thread, tests BX, and if zero updates SI.
-; Otherwise continues execution. Ends with `jmp next` to return to the inner interpreter.
+; Otherwise continues execution. Ends with `jmp next` to return to the address interpreter.
 
 ; ----------------------------
 ; -- Forth Note - zero_branch
@@ -722,7 +722,7 @@ zerob_z:            pop bx
 ; -- Assembly Note - branch
 ; ------------------------------
 ; Loads a 16-bit offset from the thread and updates SI unconditionally.
-; Ends with `jmp next` to continue inner interpreter dispatch.
+; Ends with `jmp next` to continue address interpreter dispatch.
 
 ; ----------------------------
 ; -- Forth Note - branch
@@ -893,7 +893,7 @@ to_numh:            push cx
 ; characters to the terminal. `word` extracts a token from the input buffer,
 ; copying it to dictionary space and terminating with a space. `emit` writes
 ; a character from the stack to the terminal via `outchar`. Each primitive
-; ends with `jmp next` to continue the inner interpreter loop.
+; ends with `jmp next` to continue the address interpreter loop.
 
 ; ------------------------------
 ; -- Forth Note - Terminal I/O Primitives
@@ -911,14 +911,14 @@ to_numh:            push cx
 ; line of input from the user, handles backspace, updates the input buffer
 ; pointer (>in) and character count (#tib), and echoes typed characters.
 ; Control characters like carriage return and bell are processed correctly.
-; Ends with `jmp next` to return to the inner interpreter loop.
+; Ends with `jmp next` to return to the address interpreter loop.
 
 ; ------------------------------
 ; -- Forth Note - accept
 ; ------------------------------
 ; `accept` reads a line of text into the input buffer for further processing.
 ; It updates the buffer pointer (>in) and character count (#tib). Programs
-; and the outer interpreter rely on it to fetch user input for interpretation
+; and the text interpreter rely on it to fetch user input for interpretation
 ; or compilation.
 
                                         ; accept
@@ -966,7 +966,7 @@ acceptz:            jcxz acceptb
 ; buffer starting at `>in` in the terminal input area, copies characters
 ; up to a delimiter into the dictionary at `dp`, and updates `>in` to
 ; point past the consumed input. Ends with `jmp next` to return control
-; to the inner interpreter.
+; to the address interpreter.
 
 ; ------------------------------
 ; -- Forth Note - word
@@ -1017,7 +1017,7 @@ wordz:              mov byte[di+1],32
 ; ------------------------------
 ; `emit` swaps AX/BX to place the character in AL, then calls DOS
 ; interrupt 21h function 2 to write the character to the standard
-; output. Returns to the inner interpreter with `jmp next`. Uses
+; output. Returns to the address interpreter with `jmp next`. Uses
 ; `getchar` and `outchar` as low-level I/O helpers.
 
 ; ------------------------------
@@ -1064,7 +1064,7 @@ outchar:            xchg ax,dx
 ; -- Forth Note - find
 ; ------------------------------
 ; `find` is a Forth word that searches the dictionary for a given name.
-; When called by the outer interpreter, it determines whether input
+; When called by the text interpreter, it determines whether input
 ; matches an existing definition. On success, the word can be executed
 ; or compiled; on failure, the search result signals undefined input.
 
@@ -1110,11 +1110,11 @@ findi:              and ax,31
                     jmp next
 
 ; ------------------------------
-; -- Forth Note - Complete Word Chain (Pre-Outer Interpreter)
+; -- Forth Note - Complete Word Chain (Pre-Text Interpreter)
 ; ------------------------------
 ; The dictionary now contains the head, core variables, and all
 ; implemented primitives, including flow control, string, and
-; terminal I/O words. The inner interpreter (`next`) is fully
+; terminal I/O words. The address interpreter (`next`) is fully
 ; available, allowing these words to execute via their code field
 ; addresses (cfa):
 ;
@@ -1126,7 +1126,7 @@ findi:              and ax,31
 ;
 ; Each entry links to the previous one, forming a complete dictionary
 ; chain that supports lookup, compilation, and execution of all
-; primitives before the outer interpreter is fully active.
+; primitives before the text interpreter is fully active.
 
 ; -----------------------
 ; Colon Definitions
@@ -1213,10 +1213,10 @@ doconst:            push bx
                     jmp next
 
 ; -------------------------------------
-; -- Outer Interpreter (interpret)
+; -- Text Interpreter (interpret)
 ; -- Core Forth REPL (Process Input, Execute Words, Handle Control Flow)
 ; -------------------------------------
-; The outer interpreter is implemented as an ordinary Forth word whose cfa is the first
+; The text interpreter is implemented as an ordinary Forth word whose cfa is the first
 ; executed when the system starts. si is preloaded with cfa_interpret+2, and control jumps
 ; to next, which begins executing the threaded code of interpret just like any other word.
 ; interpret reads input, parses words, manages state (compile vs interpret), and dispatches
@@ -1224,7 +1224,7 @@ doconst:            push bx
 
 ; ---------
 ; -- Dictionary Word: interpret (Colon word)
-; -- Implements the Outer Interpreter
+; -- Implements the Text Interpreter
 ; ---------
 
 final:                                  ; start of the last word's dictionary header
@@ -1235,9 +1235,9 @@ nfa_interpret:      db 9,'interpret'
 cfa_interpret:      dw docolon
 
 ; ---------
-; Outer Interpreter Thread: interpt (interpreter)
+; Text Interpreter Thread: interpt (interpret)
 ;
-; Entry point of the outer interpreter.
+; Entry point of the text interpreter.
 ; Reads input into the buffer, sets #tib to the number of characters read,
 ; and initializes >in for parsing. Prepares the system to scan and interpret words.
 ; ---------
@@ -1365,14 +1365,14 @@ intskip:
                     dw cfa_comma
 
 ; ---------
-; Interpreter Loop Continuation: intdone
+; Text Interpreter Continuation: intdone
 ;
-; This word marks the end of a single iteration of the outer interpreter.
-; It unconditionally jumps back to interpt to fetch and process the next word
+; Marks the end of a single iteration of the text interpreter.
+; Unconditionally jumps back to interpt to fetch and process the next word
 ; from the input buffer, continuing the REPL loop.
 ; ---------
 intdone:
-                    ; Jump back to the start of the outer interpreter loop.
+                    ; Jump back to the start of the text interpreter loop.
                     dw cfa_branch,interpt
 
 ; ------------------------------
@@ -1389,7 +1389,7 @@ intdone:
 ;   <- colon [:] <- semicolon [;] <- create [(;code)] <- constant
 ;   <- interpret
 ;
-; With the outer interpreter now defined, this final chain fully supports
+; With the text interpreter now defined, this final chain fully supports
 ; lookup, compilation, execution, and runtime extension of all Forth words.
 
 
