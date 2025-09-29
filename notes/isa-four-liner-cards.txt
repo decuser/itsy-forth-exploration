@@ -1,0 +1,145 @@
+Mnemonic: ADD
+Function: add values
+Operands: reg, reg / reg, mem / reg, imm
+Example: ADD BX, AX               ; add AX to BX in + operation
+
+Mnemonic: AND
+Function: bitwise AND
+Operands: reg, imm / reg, mem
+Example: AND AL, 07Fh             ; mask character in find routine
+
+Mnemonic: CALL
+Function: call subroutine
+Operands: call label
+Example: CALL GETCHAR              ; call getchar routine
+
+Mnemonic: CMP
+Function: compare (sets flags)
+Operands: reg, imm / reg, mem
+Example: CMP AL, 8                 ; check for backspace
+
+Mnemonic: DEC
+Function: decrement
+Operands: reg
+Example: DEC BX                    ; decrement index in find routine
+
+Mnemonic: INC
+Function: increment
+Operands: reg
+Example: INC BP                    ; increment stack pointer in exit
+
+Mnemonic: INT
+Function: software interrupt
+Operands: interrupt number
+Example: INT 021h                  ; DOS interrupt for I/O
+
+Mnemonic: JC
+Function: jump if carry
+Operands: jump label
+Example: JC CARRY_HANDLER          ; conditional branch
+
+Mnemonic: JCXZ
+Function: jump if CX=0
+Operands: jump label
+Example: JCXZ ACCEPTB              ; loop exit if CX=0
+
+Mnemonic: JE
+Function: jump if equal
+Operands: jump label
+Example: JE TO_NUMZ                ; branch if zero
+
+Mnemonic: JMP
+Function: unconditional / indirect jump
+Operands: jump label / reg
+Example: JMP NEXT                  ; go to next instruction
+
+Mnemonic: JNC
+Function: jump if not carry
+Operands: jump label
+Example: JNC NEXT_STEP             ; branch if no carry
+
+Mnemonic: JNE
+Function: jump if not equal
+Operands: jump label
+Example: JNE ZEROB_Z               ; branch if BX not zero
+
+Mnemonic: LEA
+Function: load effective address
+Operands: reg, mem
+Example: LEA BX, [DI+2]           ; prepare address for colon word
+
+Mnemonic: LODSW
+Function: load string word from DS:SI
+Operands: none
+Example: LODSW                     ; fetch next word in interpret loop
+
+Mnemonic: LOOP
+Function: loop with CX decrement
+Operands: jump label
+Example: LOOP FINDC                ; loop in find routine
+
+Mnemonic: MOV
+Function: copy value
+Operands: reg, reg / reg, mem / mem, reg / reg, imm
+Example: MOV AX, word[dfa_ntib]   ; load TIB size into AX
+
+Mnemonic: MUL
+Function: unsigned multiply (reg*mem -> AX)
+Operands: reg / mem
+Example: MUL WORD[dfa_base]        ; multiply in >number routine
+
+Mnemonic: NEG
+Function: negate value
+Operands: reg
+Example: NEG BX                    ; negate index in find routine
+
+Mnemonic: POP
+Function: pop from stack
+Operands: reg / mem
+Example: POP BX                    ; pop value in rot/drop/dup words
+
+Mnemonic: PUSH
+Function: push to stack
+Operands: reg
+Example: PUSH BX                   ; push value in lit/dup routines
+
+Mnemonic: RET
+Function: return from subroutine
+Operands: none
+Example: RET                        ; return from outchar/getchar
+
+Mnemonic: SBB
+Function: subtract with borrow
+Operands: reg, reg
+Example: SBB BX, BX                 ; adjust multi-byte subtraction in equals
+
+Mnemonic: STOSB
+Function: store string byte at ES:DI
+Operands: none
+Example: STOSB                      ; output byte in accept routine
+
+Mnemonic: STOSW
+Function: store string word at ES:DI
+Operands: none
+Example: STOSW                      ; store dictionary word in comma
+
+Mnemonic: SUB
+Function: subtract values
+Operands: reg, reg / reg, mem / reg, imm
+Example: SUB BX, AX                 ; subtract in equals routine
+
+Mnemonic: TEST
+Function: bitwise AND, sets flags
+Operands: reg, reg / reg, imm
+Example: TEST BX, BX                 ; check if BX zero for zero-branch
+
+Mnemonic: XCHG
+Function: exchange values
+Operands: reg, reg
+Example: XCHG AX, BX                 ; swap stack top and AX
+
+Mnemonic: XOR
+Function: bitwise XOR / clear
+Operands: reg, reg
+Example: XOR BP, BP                  ; clear BP in initialization
+
