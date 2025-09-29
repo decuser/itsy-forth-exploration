@@ -1227,8 +1227,6 @@ doconst:            push bx
 ; -- Implements the Outer Interpreter
 ; ---------
 
-final:                                  ; start of the last word's dictionary header
-
                                         ; interpret
 lfa_interpret:      dw lfa_constant
 nfa_interpret:      db 9,'interpret'
@@ -1374,6 +1372,36 @@ intskip:
 intdone:
                     ; Jump back to the start of the outer interpreter loop.
                     dw cfa_branch,interpt
+
+; ---------
+; -- Dictionary Word: bye
+; -- System Exit Primitive
+; ---------
+
+; -----------------------
+; Assembly Note
+; -----------------------
+; Implements a DOS program exit. Executes interrupt 20h to terminate
+; the .COM program immediately. Does not return to the inner or outer
+; interpreter loops. Placed at the end of the dictionary chain.
+
+; -----------------------
+; Forth Note
+; -----------------------
+; 'bye' is a runtime word that terminates the Forth system cleanly.
+; It can be typed at any prompt and stops execution without affecting
+; dictionary integrity or the parameter stack. No need for 'immediate'.
+
+
+final:                                  ; start of the last word's dictionary header
+
+                                        ; bye
+lfa_bye:          dw lfa_interpret
+nfa_bye:          db 3,'bye'
+cfa_bye:          dw $+2
+
+                    int 20h             ; terminate program, does not jump to next
+
 
 ; ------------------------------
 ; -- Forth Note - Final Word Chain

@@ -198,7 +198,7 @@
    198 00000023 [1800]                  lfa_dp:             dw lfa_ntib
    199 00000025 026470                  nfa_dp:             db 2,'dp'
    200 00000028 [FC02]                  cfa_dp:             dw  dovar
-   201 0000002A [D203]                  dfa_dp:             dw freemem
+   201 0000002A [DC03]                  dfa_dp:             dw freemem
    202                                  
    203                                                                          ; base
    204 0000002C [2300]                  lfa_base:           dw lfa_dp
@@ -210,7 +210,7 @@
    210 00000037 [2C00]                  lfa_last:           dw lfa_base
    211 00000039 046C617374              nfa_last:           db 4,'last'
    212 0000003E [FC02]                  cfa_last:           dw  dovar
-   213 00000040 [4003]                  dfa_last:           dw final
+   213 00000040 [D203]                  dfa_last:           dw final
    214                                  
    215                                                                          ; tib
    216 00000042 [3700]                  lfa_tib:            dw lfa_last
@@ -1232,186 +1232,210 @@
   1227                                  ; -- Implements the Outer Interpreter
   1228                                  ; ---------
   1229                                  
-  1230                                  final:                                  ; start of the last word's dictionary header
-  1231                                  
-  1232                                                                          ; interpret
-  1233 00000340 [2603]                  lfa_interpret:      dw lfa_constant
-  1234 00000342 09696E746572707265-     nfa_interpret:      db 9,'interpret'
-  1234 0000034B 74                 
-  1235 0000034C [AC02]                  cfa_interpret:      dw docolon
-  1236                                  
-  1237                                  ; ---------
-  1238                                  ; Outer Interpreter Thread: interpt (interpreter)
-  1239                                  ;
-  1240                                  ; Entry point of the outer interpreter.
-  1241                                  ; Reads input into the buffer, sets #tib to the number of characters read,
-  1242                                  ; and initializes >in for parsing. Prepares the system to scan and interpret words.
-  1243                                  ; ---------
-  1244                                  interpt:            
-  1245                                                      ; Fetch the value of the input buffer length and
-  1246                                                      ; the current position index within it.
-  1247 0000034E [1F00][DE00][1400]-                         dw cfa_ntib,cfa_fetch,cfa_to_in,cfa_fetch
-  1247 00000354 [DE00]             
-  1248                                  
-  1249                                                      ; Compare the input buffer length with the current index
-  1250                                                      ; If they are not equal, more text remains to be processed
-  1251                                                      ; go get it
-  1252 00000356 [CE00][FD00][7003]-                         dw cfa_equals,cfa_zero_branch,intpar,cfa_tib
-  1252 0000035C [4800]             
-  1253                                  
-  1254                                                      ; Push 50 onto the stack to tell accept to read up to 50 characters.
-  1255                                                      ; Store the actual number of characters read into #tib.
-  1256 0000035E [8400]3200[A001]-                           dw cfa_lit,50,cfa_accept,cfa_ntib,cfa_store
-  1256 00000364 [1F00][E800]       
-  1257                                  
-  1258                                                      ; Reset >in to 0 to start reading from the beginning of the input buffer.
-  1259 00000368 [8400]0000[1400]-                           dw cfa_lit,0,cfa_to_in,cfa_store
-  1259 0000036E [E800]             
-  1260                                  
-  1261                                  ; ---------
-  1262                                  ; Parser and immediate word handler: intpar (parser)
-  1263                                  ;
-  1264                                  ; This code handles scanning the input buffer for the next word,
-  1265                                  ; checks if it exists in the dictionary, determines whether it is
-  1266                                  ; immediate, and executes it or compiles its CFA.
-  1267                                  ; ---------
-  1268                                  intpar:
-  1269                                                      ; Push a space (ascii 32) onto the stack as delimiter.
-  1270                                                      ; Use the word primitive to scan the input buffer up to that character.
-  1271                                                      ; After parsing a string, use find to see if it matches a dictionary entry.
-  1272                                                      ; Duplicate the result flag for further processing.
-  1273 00000370 [8400]2000[ED01]-                           dw cfa_lit,32,cfa_word,cfa_find,cfa_dup
-  1273 00000376 [5A02][AC00]       
-  1274                                  
-  1275                                                      ; If the flag from 'find' is zero, the string doesn't match any defined word.
-  1276                                                      ; Otherwise, we have a word match - fetch the interpreter state (interpret/compile)
-  1277                                                      ; to see whether to interpret or compile it.
-  1278 0000037A [FD00][9403][0A00]-                         dw cfa_zero_branch,intnf,cfa_state,cfa_fetch
-  1278 00000380 [DE00]             
-  1279                                  
-  1280                                                      ; If the found word is immediate jump to execute it; 
-  1281                                                      ; otherwise, compile its CFA into the dictionary.
-  1282 00000382 [CE00][FD00][8E03]-                         dw cfa_equals,cfa_zero_branch,intexc,cfa_comma
-  1282 00000388 [6F00]             
-  1283                                  
-  1284                                                      ; and jump to the end of the interpreter loop, skipping any remaining 
-  1285                                                      ; checks or compilation steps.
-  1286 0000038A [1101][CE03]                                dw cfa_branch,intdone
-  1287                                  
-  1288                                  ; ---------
-  1289                                  ; Immediate word executor: intexc (execute immediate)
-  1290                                  ;
-  1291                                  ; This code handles the case when a word is marked as immediate.
-  1292                                  ; It executes the word’s CFA right away, bypassing compilation,
-  1293                                  ; and then jumps to the end of the interpreter loop.
-  1294                                  ; ---------
-  1295                                  intexc:
-  1296                                                      ; Execute its CFA immediately, then skip the remaining
-  1297                                                      ; interpreter steps and jump to the end of the loop.
-  1298 0000038E [2101][1101][CE03]                          dw cfa_execute,cfa_branch,intdone
-  1299                                  
-  1300                                  ; ---------
-  1301                                  ; Number parsing and compilation handling: intnf (not found / number check)
-  1302                                  ;
-  1303                                  ; This code handles the case where the scanned string is not a dictionary word.
-  1304                                  ; It prepares for >number conversion by duplicating and rotating the string,
-  1305                                  ; splits the counted string into length and text, and attempts numeric conversion.
-  1306                                  ;
-  1307                                  ; If the conversion succeeds, control jumps to continue processing (intskip).
-  1308                                  ; If it fails, the code checks whether we are interpreting or compiling.
-  1309                                  ; For compilation, it manages the LFA of the current word and restores
-  1310                                  ; the previous 'last' word in the dictionary to maintain dictionary consistency.
-  1311                                  ; ---------
-  1312                                  
-  1313                                  intnf:
-  1314                                                      ; It wasn't a word, is it as a number?
-  1315                                                      ; Duplicate and rotate the string, split length from text,
-  1316                                                      ; and call >number for conversion.
-  1317 00000394 [AC00][9100][4001]-                         dw cfa_dup,cfa_rot,cfa_count,cfa_to_number
-  1317 0000039A [5501]             
-  1318                                  
-  1319                                                      ; If >number succeeded (0 from 0branch), continue.
-  1320                                                      ; Otherwise, check interpreter state to handle conversion error.
-  1321 0000039C [FD00][BA03][0A00]-                         dw cfa_zero_branch,intskip,cfa_state,cfa_fetch
-  1321 000003A2 [DE00]             
-  1322                                  
-  1323                                                      ; if state is 0, we're intrepreting, jump directly
-  1324                                                      ; to the conversion error handler, otherwise get the
-  1325                                                      ; lfa of the word we were trying to compile and set
-  1326                                                      ; aside a copy of it
-  1327 000003A4 [FD00][B803][3E00]-                         dw cfa_zero_branch,intnc,cfa_last,cfa_fetch,cfa_dup
-  1327 000003AA [DE00][AC00]       
-  1328                                  
-  1329                                                      ; then restore the dictionary pointer to point to the end of the word we just compiled,
-  1330                                                      ; ensuring the dictionary remains consistent for subsequent words
-  1331 000003AE [DE00][3E00][E800]-                         dw cfa_fetch,cfa_last,cfa_store,cfa_dp,cfa_store
-  1331 000003B4 [2800][E800]       
-  1332                                  
-  1333                                  ; ---------
-  1334                                  ; Number Conversion Error Handler: intnc (conversion failure)
-  1335                                  ;
-  1336                                  ; This code is reached whenever a numeric conversion fails, regardless
-  1337                                  ; of whether the system is in interpretation or compilation mode.
-  1338                                  ; It calls the abort routine to reset the interpreter state and ensure
-  1339                                  ; the system remains consistent.
-  1340                                  ; ---------
-  1341                                  intnc:
-  1342                                                      ; Handle failed numeric conversion: reset the system by calling abort.
-  1343 000003B8 [5400]                                      dw cfa_abort
-  1344                                  
-  1345                                  ; ---------
-  1346                                  ; Post-Number Conversion Handler: intskip (successful conversion)
-  1347                                  ;
-  1348                                  ; This code handles the stack cleanup and compilation after a successful
-  1349                                  ; numeric conversion. It drops the temporary values returned by >number,
-  1350                                  ; leaving the converted single-precision number on the stack.
-  1351                                  ; If interpreting, it jumps to continue processing.
-  1352                                  ; If compiling, it encodes the literal by storing its CFA and the number
-  1353                                  ; into the dictionary for later execution.
-  1354                                  ; ---------
-  1355                                  intskip:
-  1356                                                      ; Success, drop the temporary address and high word from >number
-  1357                                                      ; leave the converted number on the stack
-  1358                                                      ; check interpreter state to decide next action.
-  1359 000003BA [A100][A100][0A00]-                         dw cfa_drop, cfa_drop, cfa_state, cfa_fetch
-  1359 000003C0 [DE00]             
-  1360                                  
-  1361                                                      ; If interpreting, jump to continue. Otherwise, encode the literal into the dictionary.  
-  1362 000003C2 [FD00][CE03][8400]-                         dw cfa_zero_branch,intdone,cfa_lit,cfa_lit,cfa_comma  
-  1362 000003C8 [8400][6F00]       
-  1363                                  
-  1364                                                      ; Store the converted number into the current word in the dictionary.  
-  1365 000003CC [6F00]                                      dw cfa_comma
-  1366                                  
-  1367                                  ; ---------
-  1368                                  ; Interpreter Loop Continuation: intdone
-  1369                                  ;
-  1370                                  ; This word marks the end of a single iteration of the outer interpreter.
-  1371                                  ; It unconditionally jumps back to interpt to fetch and process the next word
-  1372                                  ; from the input buffer, continuing the REPL loop.
-  1373                                  ; ---------
-  1374                                  intdone:
-  1375                                                      ; Jump back to the start of the outer interpreter loop.
-  1376 000003CE [1101][4E03]                                dw cfa_branch,interpt
-  1377                                  
-  1378                                  ; ------------------------------
-  1379                                  ; -- Forth Note - Final Word Chain
-  1380                                  ; ------------------------------
-  1381                                  ; The dictionary now includes all core variables, primitives, and
-  1382                                  ; high-level words, completing the Forth environment for execution:
-  1383                                  ;
-  1384                                  ;   0 <- state <- to_in [>in] <- ntib [#tib] <- dp <- base <- last <- tib
-  1385                                  ;   <- abort <- comma [,] <- lit <- rot <- drop <- dup <- swap <- plus [+]
-  1386                                  ;   <- equals [=] <- fetch [@] <- store [!]
-  1387                                  ;   <- zero_branch [0branch] <- branch <- execute <- exit <- count
-  1388                                  ;   <- to_number [>number] <- accept <- word <- emit <- find
-  1389                                  ;   <- colon [:] <- semicolon [;] <- create [(;code)] <- constant
-  1390                                  ;   <- interpret
-  1391                                  ;
-  1392                                  ; With the outer interpreter now defined, this final chain fully supports
-  1393                                  ; lookup, compilation, execution, and runtime extension of all Forth words.
-  1394                                  
-  1395                                  
-  1396                                  freemem:
-  1397                                  
+  1230                                                                          ; interpret
+  1231 00000340 [2603]                  lfa_interpret:      dw lfa_constant
+  1232 00000342 09696E746572707265-     nfa_interpret:      db 9,'interpret'
+  1232 0000034B 74                 
+  1233 0000034C [AC02]                  cfa_interpret:      dw docolon
+  1234                                  
+  1235                                  ; ---------
+  1236                                  ; Outer Interpreter Thread: interpt (interpreter)
+  1237                                  ;
+  1238                                  ; Entry point of the outer interpreter.
+  1239                                  ; Reads input into the buffer, sets #tib to the number of characters read,
+  1240                                  ; and initializes >in for parsing. Prepares the system to scan and interpret words.
+  1241                                  ; ---------
+  1242                                  interpt:            
+  1243                                                      ; Fetch the value of the input buffer length and
+  1244                                                      ; the current position index within it.
+  1245 0000034E [1F00][DE00][1400]-                         dw cfa_ntib,cfa_fetch,cfa_to_in,cfa_fetch
+  1245 00000354 [DE00]             
+  1246                                  
+  1247                                                      ; Compare the input buffer length with the current index
+  1248                                                      ; If they are not equal, more text remains to be processed
+  1249                                                      ; go get it
+  1250 00000356 [CE00][FD00][7003]-                         dw cfa_equals,cfa_zero_branch,intpar,cfa_tib
+  1250 0000035C [4800]             
+  1251                                  
+  1252                                                      ; Push 50 onto the stack to tell accept to read up to 50 characters.
+  1253                                                      ; Store the actual number of characters read into #tib.
+  1254 0000035E [8400]3200[A001]-                           dw cfa_lit,50,cfa_accept,cfa_ntib,cfa_store
+  1254 00000364 [1F00][E800]       
+  1255                                  
+  1256                                                      ; Reset >in to 0 to start reading from the beginning of the input buffer.
+  1257 00000368 [8400]0000[1400]-                           dw cfa_lit,0,cfa_to_in,cfa_store
+  1257 0000036E [E800]             
+  1258                                  
+  1259                                  ; ---------
+  1260                                  ; Parser and immediate word handler: intpar (parser)
+  1261                                  ;
+  1262                                  ; This code handles scanning the input buffer for the next word,
+  1263                                  ; checks if it exists in the dictionary, determines whether it is
+  1264                                  ; immediate, and executes it or compiles its CFA.
+  1265                                  ; ---------
+  1266                                  intpar:
+  1267                                                      ; Push a space (ascii 32) onto the stack as delimiter.
+  1268                                                      ; Use the word primitive to scan the input buffer up to that character.
+  1269                                                      ; After parsing a string, use find to see if it matches a dictionary entry.
+  1270                                                      ; Duplicate the result flag for further processing.
+  1271 00000370 [8400]2000[ED01]-                           dw cfa_lit,32,cfa_word,cfa_find,cfa_dup
+  1271 00000376 [5A02][AC00]       
+  1272                                  
+  1273                                                      ; If the flag from 'find' is zero, the string doesn't match any defined word.
+  1274                                                      ; Otherwise, we have a word match - fetch the interpreter state (interpret/compile)
+  1275                                                      ; to see whether to interpret or compile it.
+  1276 0000037A [FD00][9403][0A00]-                         dw cfa_zero_branch,intnf,cfa_state,cfa_fetch
+  1276 00000380 [DE00]             
+  1277                                  
+  1278                                                      ; If the found word is immediate jump to execute it; 
+  1279                                                      ; otherwise, compile its CFA into the dictionary.
+  1280 00000382 [CE00][FD00][8E03]-                         dw cfa_equals,cfa_zero_branch,intexc,cfa_comma
+  1280 00000388 [6F00]             
+  1281                                  
+  1282                                                      ; and jump to the end of the interpreter loop, skipping any remaining 
+  1283                                                      ; checks or compilation steps.
+  1284 0000038A [1101][CE03]                                dw cfa_branch,intdone
+  1285                                  
+  1286                                  ; ---------
+  1287                                  ; Immediate word executor: intexc (execute immediate)
+  1288                                  ;
+  1289                                  ; This code handles the case when a word is marked as immediate.
+  1290                                  ; It executes the word’s CFA right away, bypassing compilation,
+  1291                                  ; and then jumps to the end of the interpreter loop.
+  1292                                  ; ---------
+  1293                                  intexc:
+  1294                                                      ; Execute its CFA immediately, then skip the remaining
+  1295                                                      ; interpreter steps and jump to the end of the loop.
+  1296 0000038E [2101][1101][CE03]                          dw cfa_execute,cfa_branch,intdone
+  1297                                  
+  1298                                  ; ---------
+  1299                                  ; Number parsing and compilation handling: intnf (not found / number check)
+  1300                                  ;
+  1301                                  ; This code handles the case where the scanned string is not a dictionary word.
+  1302                                  ; It prepares for >number conversion by duplicating and rotating the string,
+  1303                                  ; splits the counted string into length and text, and attempts numeric conversion.
+  1304                                  ;
+  1305                                  ; If the conversion succeeds, control jumps to continue processing (intskip).
+  1306                                  ; If it fails, the code checks whether we are interpreting or compiling.
+  1307                                  ; For compilation, it manages the LFA of the current word and restores
+  1308                                  ; the previous 'last' word in the dictionary to maintain dictionary consistency.
+  1309                                  ; ---------
+  1310                                  
+  1311                                  intnf:
+  1312                                                      ; It wasn't a word, is it as a number?
+  1313                                                      ; Duplicate and rotate the string, split length from text,
+  1314                                                      ; and call >number for conversion.
+  1315 00000394 [AC00][9100][4001]-                         dw cfa_dup,cfa_rot,cfa_count,cfa_to_number
+  1315 0000039A [5501]             
+  1316                                  
+  1317                                                      ; If >number succeeded (0 from 0branch), continue.
+  1318                                                      ; Otherwise, check interpreter state to handle conversion error.
+  1319 0000039C [FD00][BA03][0A00]-                         dw cfa_zero_branch,intskip,cfa_state,cfa_fetch
+  1319 000003A2 [DE00]             
+  1320                                  
+  1321                                                      ; if state is 0, we're intrepreting, jump directly
+  1322                                                      ; to the conversion error handler, otherwise get the
+  1323                                                      ; lfa of the word we were trying to compile and set
+  1324                                                      ; aside a copy of it
+  1325 000003A4 [FD00][B803][3E00]-                         dw cfa_zero_branch,intnc,cfa_last,cfa_fetch,cfa_dup
+  1325 000003AA [DE00][AC00]       
+  1326                                  
+  1327                                                      ; then restore the dictionary pointer to point to the end of the word we just compiled,
+  1328                                                      ; ensuring the dictionary remains consistent for subsequent words
+  1329 000003AE [DE00][3E00][E800]-                         dw cfa_fetch,cfa_last,cfa_store,cfa_dp,cfa_store
+  1329 000003B4 [2800][E800]       
+  1330                                  
+  1331                                  ; ---------
+  1332                                  ; Number Conversion Error Handler: intnc (conversion failure)
+  1333                                  ;
+  1334                                  ; This code is reached whenever a numeric conversion fails, regardless
+  1335                                  ; of whether the system is in interpretation or compilation mode.
+  1336                                  ; It calls the abort routine to reset the interpreter state and ensure
+  1337                                  ; the system remains consistent.
+  1338                                  ; ---------
+  1339                                  intnc:
+  1340                                                      ; Handle failed numeric conversion: reset the system by calling abort.
+  1341 000003B8 [5400]                                      dw cfa_abort
+  1342                                  
+  1343                                  ; ---------
+  1344                                  ; Post-Number Conversion Handler: intskip (successful conversion)
+  1345                                  ;
+  1346                                  ; This code handles the stack cleanup and compilation after a successful
+  1347                                  ; numeric conversion. It drops the temporary values returned by >number,
+  1348                                  ; leaving the converted single-precision number on the stack.
+  1349                                  ; If interpreting, it jumps to continue processing.
+  1350                                  ; If compiling, it encodes the literal by storing its CFA and the number
+  1351                                  ; into the dictionary for later execution.
+  1352                                  ; ---------
+  1353                                  intskip:
+  1354                                                      ; Success, drop the temporary address and high word from >number
+  1355                                                      ; leave the converted number on the stack
+  1356                                                      ; check interpreter state to decide next action.
+  1357 000003BA [A100][A100][0A00]-                         dw cfa_drop, cfa_drop, cfa_state, cfa_fetch
+  1357 000003C0 [DE00]             
+  1358                                  
+  1359                                                      ; If interpreting, jump to continue. Otherwise, encode the literal into the dictionary.  
+  1360 000003C2 [FD00][CE03][8400]-                         dw cfa_zero_branch,intdone,cfa_lit,cfa_lit,cfa_comma  
+  1360 000003C8 [8400][6F00]       
+  1361                                  
+  1362                                                      ; Store the converted number into the current word in the dictionary.  
+  1363 000003CC [6F00]                                      dw cfa_comma
+  1364                                  
+  1365                                  ; ---------
+  1366                                  ; Interpreter Loop Continuation: intdone
+  1367                                  ;
+  1368                                  ; This word marks the end of a single iteration of the outer interpreter.
+  1369                                  ; It unconditionally jumps back to interpt to fetch and process the next word
+  1370                                  ; from the input buffer, continuing the REPL loop.
+  1371                                  ; ---------
+  1372                                  intdone:
+  1373                                                      ; Jump back to the start of the outer interpreter loop.
+  1374 000003CE [1101][4E03]                                dw cfa_branch,interpt
+  1375                                  
+  1376                                  
+  1377                                  ; ---------
+  1378                                  ; -- Dictionary Word: bye
+  1379                                  ; -- System Exit Primitive
+  1380                                  ; ---------
+  1381                                  
+  1382                                  ; -----------------------
+  1383                                  ; Assembly Note
+  1384                                  ; -----------------------
+  1385                                  ; This code ...
+  1386                                  
+  1387                                  ; -----------------------
+  1388                                  ; Forth Note
+  1389                                  ; -----------------------
+  1390                                  ; bye is a special primitive ...
+  1391                                  
+  1392                                  final:                                  ; start of the last word's dictionary header
+  1393                                  
+  1394                                                                          ; bye
+  1395 000003D2 [4003]                  lfa_bye:          dw lfa_interpret
+  1396 000003D4 03626565                nfa_bye:          db 3,'bee'
+  1397 000003D8 [DA03]                  cfa_bye:          dw $+2
   1398                                  
+  1399 000003DA CD20                                        int 20h             ; terminate program, does not jump to next
+  1400                                  
+  1401                                  
+  1402                                  ; ------------------------------
+  1403                                  ; -- Forth Note - Final Word Chain
+  1404                                  ; ------------------------------
+  1405                                  ; The dictionary now includes all core variables, primitives, and
+  1406                                  ; high-level words, completing the Forth environment for execution:
+  1407                                  ;
+  1408                                  ;   0 <- state <- to_in [>in] <- ntib [#tib] <- dp <- base <- last <- tib
+  1409                                  ;   <- abort <- comma [,] <- lit <- rot <- drop <- dup <- swap <- plus [+]
+  1410                                  ;   <- equals [=] <- fetch [@] <- store [!]
+  1411                                  ;   <- zero_branch [0branch] <- branch <- execute <- exit <- count
+  1412                                  ;   <- to_number [>number] <- accept <- word <- emit <- find
+  1413                                  ;   <- colon [:] <- semicolon [;] <- create [(;code)] <- constant
+  1414                                  ;   <- interpret
+  1415                                  ;
+  1416                                  ; With the outer interpreter now defined, this final chain fully supports
+  1417                                  ; lookup, compilation, execution, and runtime extension of all Forth words.
+  1418                                  
+  1419                                  
+  1420                                  freemem:
+  1421                                  
+  1422                                  
