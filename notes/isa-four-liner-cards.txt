@@ -143,3 +143,31 @@ Function: bitwise XOR / clear
 Operands: reg, reg
 Example: XOR BP, BP                  ; clear BP in initialization
 
+DOS INTERRUPTS
+
+Menmonic: INT 20H
+Function: Program Terminate
+CS = address of PSP (default in com program)
+Returns: Nothing
+Example: INT 20H                    ; terminate program
+
+Mnemonic: INT 21H
+Function: Display Output Character
+AH = 02H, DL = character to output
+Returns: Nothing
+Example:
+  MOV AH,02H
+  MOV DL,'A'
+  INT 21H
+
+Mnemonic: INT 21H
+Function: Direct Console Input Without Echo
+AH = 07H
+Returns: AL = character from STDIN
+Example:
+  MOV AH,07H
+  INT 21H                           ; after, AL contains input character
+  
+
+
+
