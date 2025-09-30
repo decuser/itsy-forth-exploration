@@ -1,0 +1,321 @@
+     1                                  ; =======================================
+     2                                  ;  itsy64.asm - 64 bit port of itsy Forth
+     3                                  ; =======================================
+     4                                  
+     5                                  ; TODO
+     6                                  ; Address Interpreter
+     7                                  ; This interpreter fetches and executes CFAs in threaded code. It
+     8                                  ; repeatedly reads the next code field address (CFA) from a word’s threaded
+     9                                  ; sequence and jumps to execute that code. This loop is the core of Forth’s
+    10                                  ; indirect-threaded execution model.
+    11                                  
+    12                                  ; Dictionary entries
+    13                                  
+    14                                  ; Text Interpreter
+    15                                  ; This interpreter parses input, finds words, executes or compiles
+    16                                  ; Handles input strings from the user or program, searches the dictionary
+    17                                  ; for each word, and either executes it immediately or compiles it into a
+    18                                  ; new definition depending on the current state.
+    19                                  
+    20                                  ; ------------------
+    21                                  ; Version constants - enough for homegrown project
+    22                                  ; ------------------
+    23                                  major_version  equ 0
+    24                                  minor_version  equ 1
+    25                                  patch_version  equ 0
+    26                                  
+    27                                  ; -------------------------------------------------------------------
+    28                                  ; Dictionary Entry Macro - used to build dictionary entries
+    29                                  ; -------------------------------------------------------------------
+    30                                  ; Defines the layout and construction of dictionary entries used by the
+    31                                  ; Forth system. Each entry links to the previous one, stores its name and
+    32                                  ; execution semantics, and includes an optional data field.
+    33                                  ;
+    34                                  ; Layout (64-bit fields unless noted):
+    35                                  ;   LFA (link)   - pointer to previous dictionary entry
+    36                                  ;   NFA (name)   - length-prefixed ASCII name
+    37                                  ;   CFA (code)   - execution handler selector: PRIMITIVE | COLON | CONSTANT | VARIABLE
+    38                                  ;   DFA (data)   - initial value or pointer; VARIABLES reside in writable memory
+    39                                  ;
+    40                                  ; Dictionary grows upward from dict_base, with HEAD pointing to the latest entry.
+    41                                  ;
+    42                                  ; Example usage:
+    43                                  ;   DICT_ENTRY HEAD, 'dup', PRIMITIVE, NO_DFA
+    44                                  ;   DICT_ENTRY dup, 'swap', PRIMITIVE, NO_DFA
+    45                                  ;   DICT_ENTRY swap, 'rot', PRIMITIVE, NO_DFA
+    46                                  ;   DICT_ENTRY rot, 'myvar', VARIABLE, 0
+    47                                  ;   DICT_ENTRY myvar, 'myconst', CONSTANT, 123
+    48                                  ;   DICT_ENTRY myconst, 'mycolon', COLON, NO_DFA
+    49                                  
+    50                                  %macro DICT_ENTRY 4
+    51                                      dw %1                          ; link field (LFA)
+    52                                      db %2 + %2:len, %2             ; name field (NFA), length-prefixed
+    53                                      %if %3 = PRIMITIVE
+    54                                          dq $+2                     ; code field (CFA), points to primitive code
+    55                                      %elif %3 = COLON
+    56                                          dq docolon                 ; CFA points to colon handler
+    57                                      %elif %3 = CONSTANT
+    58                                          dq doconst                 ; CFA points to constant handler
+    59                                      %elif %3 = VARIABLE
+    60                                          dq dovar                   ; CFA points to variable handler
+    61                                      %endif
+    62                                      dw %4                          ; data field (DFA)
+    63                                  %endmacro
+    64                                  
+    65                                  ; -------------------------------------------------------------------
+    66                                  ; Memory model design decisions
+    67                                  ; -------------------------------------------------------------------
+    68                                  ; Using a 16-bit virtual address space for dictionary and stacks
+    69                                  ; within a 64-bit ELF64 environment. Memory is a single flat segment
+    70                                  ; containing code, dictionary entries, and stack space.
+    71                                  ;
+    72                                  ; Growth directions:
+    73                                  ; - Dictionary: upward from 0x0000
+    74                                  ; - Data stack: downward from 0xFF00
+    75                                  ; - Return stack: downward from 0xFE00
+    76                                  ;
+    77                                  ; This layout simplifies early development and allows expansion without
+    78                                  ; changing allocation logic. Address calculations for words and runtime
+    79                                  ; structures remain straightforward.
+    80                                  
+    81                                  ; -------------------------------------------------------------------
+    82                                  ; Stacks and runtime data structures (bss and rodata)
+    83                                  ; -------------------------------------------------------------------
+    84                                  ; This implementation uses two software-managed stacks: a data stack and a return stack.
+    85                                  ; The data stack holds operands, while the return stack holds return addresses, making
+    86                                  ; nested word execution and colon definitions simpler. The hardware stack is left for
+    87                                  ; CPU operations like interrupts and CALL/RET, keeping system control flow separate
+    88                                  ; from Forth’s threaded execution.
+    89                                  
+    90                                  section .bss
+    91                                  
+    92 00000000 ????????????????        sigint_orig:   resq 1    ; stores original SIGINT handler pointer
+    93 00000008 <res 10h>               sigact:        resb 16   ; minimal sigaction structure for installing handler
+    94 00000018 <res 2Ch>               termios_orig:  resb 44   ; saved original terminal settings
+    95 00000044 <res 2Ch>               termios_raw:   resb 44   ; modified terminal settings for raw mode
+    96                                  
+    97                                  
+    98                                  ; Program stack pointers
+    99 00000070 ????????????????        dp:      resq 1    ; current data stack pointer
+   100 00000078 ????????????????        rp:      resq 1    ; current return stack pointer
+   101 00000080 ????????????????        latest:  resq 1    ; address of the most recent dictionary entry
+   102                                  
+   103                                  ; Program stack base addresses
+   104                                  dict_base         equ 0x0000  ; start of dictionary space
+   105                                  data_stack_base   equ 0xFF00  ; start of data stack
+   106                                  return_stack_base equ 0xFE00  ; start of return stack
+   107                                  
+   108                                  section .rodata
+   109                                  
+   110                                  ; Static strings and constants used by the program. The banner is displayed
+   111                                  ; at startup and its length is computed for use with write syscalls.
+   112 00000000 495453593634207630-     banner: db "ITSY64 v", major_version + '0', ".", minor_version + '0', ".", patch_version + '0', 10
+   112 00000009 2E312E300A         
+   113                                  banner_len: equ $ - banner
+   114                                  
+   115                                  
+   116                                  ; -------------------------------------------------------------------
+   117                                  ; Code begins (text)
+   118                                  ; -------------------------------------------------------------------
+   119                                  section .text
+   120                                  global _start
+   121                                  
+   122                                  ; ---
+   123                                  ; Pure assembly helpers
+   124                                  ; ---
+   125                                  
+   126                                  ; Data stack operations (RAX holds value)
+   127                                  push_dp:
+   128 00000000 48832C25[70000000]-         sub qword [dp], 8            ; decrement data stack pointer
+   128 00000008 08                 
+   129 00000009 48890425[70000000]          mov [dp], rax                ; store value at new top
+   130 00000011 C3                          ret
+   131                                  
+   132                                  pop_dp:
+   133 00000012 488B0425[70000000]          mov rax, [dp]                ; load value from top
+   134 0000001A 48830425[70000000]-         add qword [dp], 8            ; increment data stack pointer
+   134 00000022 08                 
+   135 00000023 C3                          ret
+   136                                  
+   137                                  ; Return stack operations (RAX holds return address)
+   138                                  push_rp:
+   139 00000024 48832C25[78000000]-         sub qword [rp], 8           ; decrement return stack pointer
+   139 0000002C 08                 
+   140 0000002D 48890425[78000000]          mov [rp], rax               ; store return address
+   141 00000035 C3                          ret
+   142                                  
+   143                                  pop_rp:
+   144 00000036 488B0425[78000000]          mov rax, [rp]               ; load return address
+   145 0000003E 48830425[78000000]-         add qword [rp], 8           ; increment return stack pointer
+   145 00000046 08                 
+   146 00000047 C3                          ret
+   147                                  
+   148                                  ; Print message at RSI with length RDX
+   149                                  print_msg:
+   150 00000048 B801000000                  mov rax, 1                  ; syscall: write
+   151 0000004D BF01000000                  mov rdi, 1                  ; stdout
+   152 00000052 0F05                        syscall
+   153 00000054 C3                          ret
+   154                                  
+   155                                  ; ---
+   156                                  ; Linux x86-64 syscall helpers 
+   157                                  ; ---
+   158                                  
+   159                                  ; Minimal routines for Forth-style I/O and terminal control:
+   160                                  ; sigint_handler: 
+   161                                  ;   restores terminal and exits if Ctrl-C is pressed 
+   162                                  ;
+   163                                  ; install_sigint_handler:
+   164                                  ;   sys_rt_sigaction (rax=13), rdi=SIGINT, rsi=new sigaction ptr,
+   165                                  ;   rdx=old sigaction ptr, r10=sigsetsize; handles Ctrl-C to restore
+   166                                  ;   terminal and exit
+   167                                  ;
+   168                                  ; set_raw_mode:
+   169                                  ;   sys_ioctl (rax=16), rdi=stdin fd(0), rsi=termios struct ptr,
+   170                                  ;   rdx=TCSETS; enables raw input mode for single-character reads
+   171                                  ;
+   172                                  ; restore_cooked_mode:
+   173                                  ;   sys_ioctl (rax=16), rdi=stdin fd(0), rsi=original termios ptr,
+   174                                  ;   rdx=TCSETS; restores original terminal settings
+   175                                  ;
+   176                                  ; getchar:
+   177                                  ;   sys_read (rax=0), rdi=0(stdin), rsi=buffer, rdx=1; reads one byte
+   178                                  ;   from stdin into rax
+   179                                  ;
+   180                                  ; outchar:
+   181                                  ;   sys_write (rax=1), rdi=1(stdout), rsi=buffer, rdx=1; writes one byte
+   182                                  ;   from rax to stdout
+   183                                  ;
+   184                                  ; exit_program:
+   185                                  ;   sys_exit (rax=60), rdi=exit_code; exits with code in rdi
+   186                                  
+   187                                  
+   188                                  ; Restore terminal settings on Ctrl-C and exit cleanly
+   189                                  sigint_handler:
+   190 00000055 E8A8000000                  call restore_cooked_mode
+   191 0000005A B83C000000                  mov rax, 60        ; SYS_exit
+   192 0000005F 4831FF                      xor rdi, rdi       ; exit code 0
+   193 00000062 0F05                        syscall
+   194                                  
+   195                                  ; Installs a handler for SIGINT (Ctrl-C) that invokes sigint_handler
+   196                                  install_sigint_handler:
+   197 00000064 B80D000000                  mov rax, 13              ; syscall: rt_sigaction
+   198 00000069 BF02000000                  mov rdi, 2               ; SIGINT
+   199 0000006E 488D3425[08000000]          lea rsi, [sigact]        ; new sigaction struct
+   200 00000076 488D1425[00000000]          lea rdx, [sigint_orig]   ; save old handler
+   201 0000007E 41BA08000000                mov r10, 8               ; sigset size (bytes)
+   202 00000084 0F05                        syscall
+   203 00000086 C3                          ret
+   204                                  
+   205                                  ; Switches terminal to raw mode by disabling canonical input and echo,
+   206                                  ; and configuring VMIN/VTIME for single-character reads.
+   207                                  set_raw_mode:
+   208                                      ; fetch current settings
+   209 00000087 B810000000                  mov rax, 16            ; SYS_ioctl
+   210 0000008C BF00000000                  mov rdi, 0             ; stdin
+   211 00000091 BE01540000                  mov rsi, 0x5401        ; TCGETS
+   212 00000096 488D1425[18000000]          lea rdx, [termios_orig]
+   213 0000009E 0F05                        syscall
+   214                                  
+   215                                      ; copy entire termios_orig to termios_raw
+   216 000000A0 488D3425[18000000]          lea rsi, [termios_orig]
+   217 000000A8 488D3C25[44000000]          lea rdi, [termios_raw]
+   218 000000B0 B92C000000                  mov rcx, 44             ; termios struct size
+   219                                  .copy:
+   220 000000B5 8A06                        mov al, [rsi]
+   221 000000B7 8807                        mov [rdi], al
+   222 000000B9 48FFC6                      inc rsi
+   223 000000BC 48FFC7                      inc rdi
+   224 000000BF 48FFC9                      dec rcx
+   225 000000C2 75F1                        jnz .copy
+   226                                  
+   227                                      ; disable canonical mode and echo (ICANON | ECHO) in c_lflag
+   228 000000C4 668B0425[50000000]          mov ax, [termios_raw + 12]  ; c_lflag offset
+   229 000000CC 6683E0F5                    and ax, 0xFFF5               ; clear bits ICANON (2) and ECHO (8)
+   230 000000D0 66890425[50000000]          mov [termios_raw + 12], ax
+   231                                  
+   232                                      ; set VMIN=1, VTIME=0 (c_cc[VMIN] = 22, c_cc[VTIME] = 23)
+   233 000000D8 C60425[5A000000]01          mov byte [termios_raw + 22], 1
+   234 000000E0 C60425[5B000000]00          mov byte [termios_raw + 23], 0
+   235                                  
+   236                                      ; apply modified settings
+   237 000000E8 B810000000                  mov rax, 16            ; SYS_ioctl
+   238 000000ED BF00000000                  mov rdi, 0             ; stdin
+   239 000000F2 BE02540000                  mov rsi, 0x5402        ; TCSETS
+   240 000000F7 488D1425[44000000]          lea rdx, [termios_raw]
+   241 000000FF 0F05                        syscall
+   242 00000101 C3                          ret
+   243                                  
+   244                                  ; Restores the terminal to its original (cooked) settings
+   245                                  ; saved before raw mode was enabled.
+   246                                  restore_cooked_mode:
+   247 00000102 B810000000                  mov rax, 16            ; SYS_ioctl
+   248 00000107 BF00000000                  mov rdi, 0             ; stdin
+   249 0000010C BE02540000                  mov rsi, 0x5402        ; TCSETS
+   250 00000111 488D1425[18000000]          lea rdx, [termios_orig] ; restore entire struct
+   251 00000119 0F05                        syscall
+   252 0000011B C3                          ret
+   253                                  
+   254                                  ; Reads a single byte from stdin into rax using a temporary stack buffer.
+   255                                  getchar:
+   256 0000011C B800000000                  mov rax, 0              ; syscall: read
+   257 00000121 BF00000000                  mov rdi, 0              ; stdin
+   258 00000126 488D7424F8                  lea rsi, [rsp-8]        ; temporary buffer on stack
+   259 0000012B BA01000000                  mov rdx, 1              ; read 1 byte
+   260 00000130 0F05                        syscall
+   261 00000132 480FB64424F8                movzx rax, byte [rsp-8] ; return character in rax
+   262 00000138 C3                          ret
+   263                                  
+   264                                  ; Writes the low 8 bits of rax to stdout using a temporary stack buffer.
+   265                                  outchar:
+   266 00000139 B801000000                  mov rax, 1            ; syscall: write
+   267 0000013E BF01000000                  mov rdi, 1            ; stdout
+   268 00000143 488D7424F8                  lea rsi, [rsp-8]      ; temporary buffer on stack
+   269 00000148 884424F8                    mov [rsp-8], al       ; store byte to buffer
+   270 0000014C BA01000000                  mov rdx, 1            ; write 1 byte
+   271 00000151 0F05                        syscall
+   272 00000153 C3                          ret
+   273                                  
+   274                                  ; Exits the program with the code in rdi.
+   275                                  exit_program:
+   276 00000154 B83C000000                  mov rax, 60        ; syscall: exit
+   277 00000159 0F05                        syscall
+   278                                  
+   279                                  ; -------------------------------------------------------------------
+   280                                  ; Program entry point
+   281                                  ; -------------------------------------------------------------------
+   282                                  ; Enables raw mode and installs SIGINT handler at start,
+   283                                  ; prints the welcome banner, then enters a test loop that
+   284                                  ; reads a character, echoes it, and exits on 'q'.
+   285                                  
+   286                                  _start:
+   287                                  
+   288 0000015B E827FFFFFF                  call set_raw_mode     ; enable raw mode at program start
+   289 00000160 E8FFFEFFFF                  call install_sigint_handler ; ensure Ctrl-C restores terminal
+   290                                  
+   291                                      ; display the welcome banner
+   292 00000165 48BE-                       mov rsi, banner
+   292 00000167 [0000000000000000] 
+   293 0000016F BA0E000000                  mov rdx, banner_len
+   294 00000174 E8CFFEFFFF                  call print_msg
+   295                                  
+   296                                  ; test harness to test helper calls
+   297                                  .loop:
+   298 00000179 E89EFFFFFF                  call getchar      ; read one character into rax
+   299 0000017E 3C71                        cmp al, 'q'
+   300 00000180 7407                        je .quit
+   301 00000182 E8B2FFFFFF                  call outchar      ; echo character
+   302 00000187 EBF0                        jmp .loop
+   303                                  
+   304                                  .quit:
+   305 00000189 E874FFFFFF                  call restore_cooked_mode   ; restore terminal first
+   306 0000018E B00D                        mov al, 13     ; carriage return
+   307 00000190 E8A4FFFFFF                  call outchar
+   308 00000195 B00A                        mov al, 10     ; newline
+   309 00000197 E89DFFFFFF                  call outchar
+   310 0000019C BF00000000                  mov rdi, 0
+   311 000001A1 E8AEFFFFFF                  call exit_program
+   312                                  
+   313                                  
+   314                                  
+   315                                  

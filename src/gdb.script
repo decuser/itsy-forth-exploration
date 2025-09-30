@@ -1,0 +1,17 @@
+break _start
+run
+step
+set disassembly-flavor intel
+set confirm off
+
+display/x $rax
+display/x $rbx
+display/x $rcx
+display/x $rsi
+display/x $rbp
+display/x $rsp
+
+define jfreg
+    printf "Next Forth word to exec: 0x%lx\n", $rsi
+end
+
