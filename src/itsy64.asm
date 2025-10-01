@@ -2,6 +2,30 @@
 ;  itsy64.asm - 64 bit port of itsy Forth
 ; =======================================
 
+; Memory layout
+; Address (hex)
+; 0x0000 ─────────────────────────────┐
+;                                     │
+;       Dictionary (grows upward)     │
+;                                     │
+;       Latest entry → HEAD → ...     │
+;                                     │
+;                                     │
+; 0xFE00 ─────────────────────────────┤
+;                                     │
+;       Return Stack (grows downward) │
+;       rp points here initially      │
+;       Each element: 8 bytes         │
+;                                     │
+; 0xFF00 ─────────────────────────────┤
+;                                     │
+;       Data Stack (grows downward)   │
+;       dp points here initially      │
+;       Each element: 8 bytes         │
+;                                     │
+;0xFFFF ──────────────────────────────┘
+;
+
 ; TODO
 ; Address Interpreter
 ; This interpreter fetches and executes CFAs in threaded code. It
@@ -89,11 +113,8 @@ patch_version  equ 0
 
 section .bss
 
-sigint_orig:   resq 1    ; stores original SIGINT handler pointer
-sigact:        resb 16   ; minimal sigaction structure for installing handler
-termios_orig:  resb 44   ; saved original terminal settings
-termios_raw:   resb 44   ; modified terminal settings for raw mode
-
+orig_termios resb 44        ; termios struct for saving original settings
+raw_termios  resb 44        ; termios struct for raw settings
 
 ; Program stack pointers
 dp:      resq 1    ; current data stack pointer
@@ -125,30 +146,38 @@ global _start
 
 ; Data stack operations (RAX holds value)
 push_dp:
-    sub qword [dp], 8            ; decrement data stack pointer
-    mov [dp], rax                ; store value at new top
+    mov rbx, [dp]       ; load current top of data stack
+    sub rbx, 8          ; move down (stack grows downward)
+    mov [rbx], rax      ; store value at new top
+    mov [dp], rbx       ; update stack pointer
     ret
 
 pop_dp:
-    mov rax, [dp]                ; load value from top
-    add qword [dp], 8            ; increment data stack pointer
+    mov rbx, [dp]       ; load current top
+    mov rax, [rbx]      ; read value
+    add rbx, 8          ; move pointer up
+    mov [dp], rbx       ; update stack pointer
     ret
 
 ; Return stack operations (RAX holds return address)
 push_rp:
-    sub qword [rp], 8           ; decrement return stack pointer
-    mov [rp], rax               ; store return address
+    mov rbx, [rp]       ; load current top of return stack
+    sub rbx, 8
+    mov [rbx], rax
+    mov [rp], rbx
     ret
 
 pop_rp:
-    mov rax, [rp]               ; load return address
-    add qword [rp], 8           ; increment return stack pointer
+    mov rbx, [rp]
+    mov rax, [rbx]
+    add rbx, 8
+    mov [rp], rbx
     ret
 
 ; Print message at RSI with length RDX
 print_msg:
-    mov rax, 1                  ; syscall: write
-    mov rdi, 1                  ; stdout
+    mov rax, 1          ; syscall: write
+    mov rdi, 1          ; stdout
     syscall
     ret
 
@@ -157,121 +186,130 @@ print_msg:
 ; ---
 
 ; Minimal routines for Forth-style I/O and terminal control:
-; sigint_handler: 
-;   restores terminal and exits if Ctrl-C is pressed 
-;
-; install_sigint_handler:
-;   sys_rt_sigaction (rax=13), rdi=SIGINT, rsi=new sigaction ptr,
-;   rdx=old sigaction ptr, r10=sigsetsize; handles Ctrl-C to restore
-;   terminal and exit
 ;
 ; set_raw_mode:
-;   sys_ioctl (rax=16), rdi=stdin fd(0), rsi=termios struct ptr,
-;   rdx=TCSETS; enables raw input mode for single-character reads
+;   Uses ioctl (rax=16) with TCSETS (esi=0x5402) on stdin (rdi=0) to apply
+;   a modified termios struct that disables ICANON and ECHO, enabling
+;   raw single-character input.
 ;
-; restore_cooked_mode:
-;   sys_ioctl (rax=16), rdi=stdin fd(0), rsi=original termios ptr,
-;   rdx=TCSETS; restores original terminal settings
+; restore_original_mode:
+;   Uses ioctl (rax=16) with TCSETS on stdin to restore the saved
+;   original termios settings.
 ;
 ; getchar:
-;   sys_read (rax=0), rdi=0(stdin), rsi=buffer, rdx=1; reads one byte
-;   from stdin into rax
+;   Uses read (rax=0) on stdin (rdi=0) to read one byte into a temporary
+;   buffer, then returns the character in al (zero-extended in rax).
 ;
 ; outchar:
-;   sys_write (rax=1), rdi=1(stdout), rsi=buffer, rdx=1; writes one byte
-;   from rax to stdout
+;   Uses write (rax=1) on stdout (rdi=1) to write the low 8 bits of rax
+;   (al) to a temporary buffer and output one byte.
 ;
 ; exit_program:
-;   sys_exit (rax=60), rdi=exit_code; exits with code in rdi
+;   Uses exit (rax=60) with the code in rdi to terminate the program.
 
+; ---
+; _copy_orig_to_raw
+; ---
+; Retrieves the current terminal settings into orig_termios using
+; the TCGETS ioctl, then copies the structure to raw_termios.
+; Used as the basis for enabling raw mode.
 
-; Restore terminal settings on Ctrl-C and exit cleanly
-sigint_handler:
-    call restore_cooked_mode
-    mov rax, 60        ; SYS_exit
-    xor rdi, rdi       ; exit code 0
+_copy_orig_to_raw:
+
+    ; Get current terminal attributes into orig_termios
+    ; tcgetattr(0, &orig_termios)
+    mov rax, 16             ; syscall number: ioctl
+    mov rdi, 0              ; fd = stdin
+    mov esi, 0x5401         ; TCGETS
+    lea rdx, [orig_termios]
     syscall
 
-; Installs a handler for SIGINT (Ctrl-C) that invokes sigint_handler
-install_sigint_handler:
-    mov rax, 13              ; syscall: rt_sigaction
-    mov rdi, 2               ; SIGINT
-    lea rsi, [sigact]        ; new sigaction struct
-    lea rdx, [sigint_orig]   ; save old handler
-    mov r10, 8               ; sigset size (bytes)
-    syscall
-    ret
-
-; Switches terminal to raw mode by disabling canonical input and echo,
-; and configuring VMIN/VTIME for single-character reads.
-set_raw_mode:
-    ; get current settings
-    mov rax, 16            ; syscall: ioctl
-    mov rdi, 0             ; stdin
-    mov rsi, 0x5401        ; TCGETS
-    lea rdx, [termios_orig]
-    syscall
-
-    ; copy original to raw buffer
-    lea rsi, [termios_orig]
-    lea rdi, [termios_raw]
+    ; Copy orig_termios to raw_termios (44-byte termios struct)
+    lea rsi, [orig_termios]
+    lea rdi, [raw_termios]
     mov rcx, 44
-.copy:
-    mov al, [rsi]
-    mov [rdi], al
-    inc rsi
-    inc rdi
-    dec rcx
-    jnz .copy
+    rep movsb
+    ret
 
-    ; disable ICANON (offset 12 = c_lflag)
-    mov ax, [termios_raw + 12]
-    and ax, 0xFFFD        ; clear ICANON
-    mov [termios_raw + 12], ax
+; ---
+; set_raw_mode
+; ---
+; Copies the current terminal settings, clears ICANON and ECHO in
+; c_lflag to enable raw mode, and applies the modified settings
+; using the TCSETS ioctl.
 
-    ; set VMIN=1, VTIME=0 (offsets 22, 23 in c_cc)
-    mov byte [termios_raw + 22], 1
-    mov byte [termios_raw + 23], 0
+set_raw_mode:
+    call _copy_orig_to_raw
 
-    ; apply modified settings
-    mov rax, 16            ; syscall: ioctl
-    mov rdi, 0             ; stdin
-    mov rsi, 0x5402        ; TCSETS
-    lea rdx, [termios_raw]
+    ; modify raw_termios for raw mode
+    ; Clear ICANON and ECHO in c_lflag
+    mov rax, [raw_termios + 12]  ; c_lflag offset
+    and rax, ~(0x00002 | 0x00008)
+    mov [raw_termios + 12], rax
+
+    ; ------------------------
+    ; tcsetattr(0, &raw_termios)
+    mov rax, 16                     ; syscall: ioctl
+    mov rdi, 0                      ; fd = stdin
+    mov esi, 0x5402                 ; TCSETS
+    lea rdx, [raw_termios]
     syscall
     ret
 
-; Restores the terminal to its original (cooked) settings
-; saved before raw mode was enabled.
-restore_cooked_mode:
-    mov rax, 16            ; syscall: ioctl
-    mov rdi, 0             ; stdin
-    mov rsi, 0x5402        ; TCSETS
-    lea rdx, [termios_orig]
+; ---
+; restore_original_mode
+; ---
+; Restores the saved terminal settings from orig_termios using
+; the TCSETS ioctl.
+
+restore_original_mode:
+    ; restore original settings
+    mov rax, 16                 ; syscall: ioctl
+    mov rdi, 0                  ; fd = stdin
+    mov esi, 0x5402             ; TCSETS
+    lea rdx, [orig_termios]
     syscall
     ret
 
-; Reads a single byte from stdin into rax using a temporary stack buffer.
+; ---
+; getchar
+; ---
+; Reads a single byte from stdin using a temporary stack buffer.
+; Returns the character in al (zero-extended in rax).
+
 getchar:
-    mov rax, 0              ; syscall: read
-    mov rdi, 0              ; stdin
-    lea rsi, [rsp-8]        ; temporary buffer on stack
+    sub rsp, 16             ; align stack and reserve space
+    mov rax, 0              ; sys_read
+    mov rdi, 0              ; fd = stdin
+    lea rsi, [rsp+8]        ; temporary buffer
     mov rdx, 1              ; read 1 byte
     syscall
-    movzx rax, byte [rsp-8] ; return character in rax
+    movzx rax, byte [rsp+8] ; return character in rax
+    add rsp, 16
     ret
 
-; Writes the low 8 bits of rax to stdout using a temporary stack buffer.
+
+; ---
+; outchar
+; ---
+; Writes the low 8 bits of rax (al) to stdout using a temporary
+; stack buffer.
+
 outchar:
-    mov rax, 1            ; syscall: write
-    mov rdi, 1            ; stdout
-    lea rsi, [rsp-8]      ; temporary buffer on stack
-    mov [rsp-8], al       ; store byte to buffer
-    mov rdx, 1            ; write 1 byte
+    sub rsp, 16             ; align stack and reserve space
+    mov [rsp+8], al         ; store byte in temp buffer
+    mov rax, 1              ; syscall: write
+    mov rdi, 1              ; fd = stdout
+    lea rsi, [rsp+8]        ; buffer address
+    mov rdx, 1              ; write 1 byte
     syscall
+    add rsp, 16
     ret
 
-; Exits the program with the code in rdi.
+; ---
+; exit_program
+; ---
+; Exits the program using the value in rdi as the exit code.
 exit_program:
     mov rax, 60        ; syscall: exit
     syscall
@@ -279,37 +317,28 @@ exit_program:
 ; -------------------------------------------------------------------
 ; Program entry point
 ; -------------------------------------------------------------------
-; Enables raw mode and installs SIGINT handler at start,
-; prints the welcome banner, then enters a test loop that
-; reads a character, echoes it, and exits on 'q'.
+; Enables raw mode at startup, then enters a loop that
+; reads a character into al, echoes it, and exits on 'q'.
 
 _start:
+    
+    call set_raw_mode
 
-    call set_raw_mode     ; enable raw mode at program start
-    call install_sigint_handler ; ensure Ctrl-C restores terminal
-
-    ; display the welcome banner
-    mov rsi, banner
-    mov rdx, banner_len
-    call print_msg
-
-; test harness to test helper calls
 .loop:
-    call getchar      ; read one character into rax
-    cmp al, 'q'
-    je .quit
-    call outchar      ; echo character
+    call getchar            ; returns char in al
+    cmp al, 'q'             ; exit on 'q'
+    je .exit
+    call outchar            ; writes al to stdout
+
+
     jmp .loop
 
-.quit:
-    call restore_cooked_mode   ; restore terminal first
-    mov al, 13     ; carriage return
-    call outchar
-    mov al, 10     ; newline
-    call outchar
-    mov rdi, 0
-    call exit_program
+.exit:
+    call restore_original_mode
 
+    ; exit
+    mov rdi, 0
+    jmp exit_program        ; sys_exit
 
 
 

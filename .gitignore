@@ -3,7 +3,9 @@
 *.com
 *.bin
 *.o
-itsy
+**/itsy
+**/termloop
+**/termloop2
 *.od
 *.dis
 *.clean
